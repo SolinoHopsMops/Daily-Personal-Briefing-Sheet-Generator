@@ -436,7 +436,7 @@ function buildPDF(legs){
    4  UI
    =========================================================================== */
 const $ = id => document.getElementById(id);
-let duties=[], sel=0, lastBlob=null, lastName="";
+let duties=[], sel=0, lastBlob=null, lastName="", warnCut=false;
 
 const say=(msg,cls="")=>{ const s=$("status"); s.textContent=msg; s.className=cls; };
 const store=(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} };
@@ -458,7 +458,9 @@ function ingest(text,src){
   if(t.indexOf("BEGIN:VCALENDAR")<0 && /^[A-Za-z0-9+/=\s]{200,}$/.test(t)){
     /* Zwei Varianten: unveraendert, und mit Leerzeichen->"+" (manche Ebenen
        wandeln das Plus einer base64-Zeichenkette in ein Leerzeichen um). */
-    for(const cand of [t.replace(/\s+/g,""), t.replace(/ /g,"+").replace(/[\r\n\t]/g,"")]){
+    const trim4 = x => x.slice(0, x.length - (x.length % 4));
+    const base = [t.replace(/\s+/g,""), t.replace(/ /g,"+").replace(/[\r\n\t]/g,"")];
+    for(const cand of base.concat(base.map(trim4))){
       try{
         const bin=atob(cand);
         const dec=new TextDecoder("utf-8").decode(Uint8Array.from(bin,c=>c.charCodeAt(0)));
@@ -480,7 +482,8 @@ function ingest(text,src){
   if(sel<0) sel=duties.length-1;
   renderDays();
   $("dayCard").classList.remove("hidden");
-  say(`${duties.length} Flugtage geladen (${src}).`,"ok");
+  warnCut = t.indexOf("END:VCALENDAR")<0;
+  say(`${duties.length} Flugtage geladen (${src}).`+(warnCut?" ACHTUNG: Feed wirkt abgeschnitten.":""), warnCut?"err":"ok");
   makePDF();
   return true;
 }
@@ -511,7 +514,9 @@ function makePDF(){
     const url=URL.createObjectURL(lastBlob);
     $("prev").src=url; $("prev").classList.remove("hidden");
     $("btnShare").classList.remove("hidden");
-    say("PDF für "+lastName.slice(9,19)+" bereit.","ok");
+    say("PDF für "+lastName.slice(9,19)+" bereit."
+        +(warnCut?" ACHTUNG: Roster kam unvollständig an – spätere Flugtage können fehlen.":""),
+        warnCut?"err":"ok");
   }catch(e){ say("PDF fehlgeschlagen: "+e.message,"err"); }
 }
 $("btnPdf").onclick=makePDF;
@@ -581,8 +586,7 @@ $("btnFetch").onclick=()=>{
     try{ raw=decodeURIComponent(m[1]); }catch(e){ raw=m[1]; }
     /* Adresse sofort bereinigen: Rosterdaten nicht im Verlauf stehen lassen */
     try{ history.replaceState(null,"",location.pathname+location.search); }catch(e){}
-    if(ingest(raw,"Kurzbefehl")) return;
-    say("Kurzbefehl-Daten unvollständig – die Adresse wurde vermutlich gekürzt. Nimm „Aus Zwischenablage einfügen“.","err");
+    ingest(raw,`Kurzbefehl, ${raw.length} Zeichen`);
     return;
   }
 
