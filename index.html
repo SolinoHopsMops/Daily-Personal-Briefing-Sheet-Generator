@@ -40,10 +40,11 @@
   #status.ok{color:var(--ok)}
 
   .days{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
-  .day{flex:0 0 auto;border:1px solid var(--line);background:#fff;border-radius:9px;
+  .day{flex:0 0 auto;width:auto;margin-top:0;border:1px solid var(--line);
+       background:#fff;color:var(--ink);font-weight:500;border-radius:9px;
        padding:8px 11px;font-family:var(--mono);font-size:12px;cursor:pointer;white-space:nowrap}
   .day.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
-  .day small{display:block;font-size:9.5px;opacity:.7;letter-spacing:.04em}
+  .day small{display:block;font-size:9.5px;opacity:.65;letter-spacing:.04em;font-weight:400}
 
   details{margin-top:6px}
   summary{cursor:pointer;font-size:13px;color:var(--accent);font-weight:600;padding:6px 0}
@@ -436,7 +437,7 @@ function buildPDF(legs){
    4  UI
    =========================================================================== */
 const $ = id => document.getElementById(id);
-let duties=[], sel=0, lastBlob=null, lastName="", warnCut=false;
+let duties=[], sel=0, lastBlob=null, lastName="", warnCut=false, stamp="";
 
 const say=(msg,cls="")=>{ const s=$("status"); s.textContent=msg; s.className=cls; };
 const store=(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} };
@@ -476,6 +477,10 @@ function ingest(text,src){
   const legs=parseICS(text);
   if(!legs.length){ say("Feed gelesen, aber keine Flüge darin gefunden.","err"); return false; }
   store("ics",text);
+  if(src.indexOf("zuletzt")<0) store("ics_at", new Date().toISOString());
+  const at=load("ics_at");
+  stamp = at ? new Date(at).toLocaleString("de-CH",
+            {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "unbekannt";
   duties=groupDuties(legs);
   const today=new Date(); today.setHours(0,0,0,0);
   sel=duties.findIndex(d=>d[d.length-1].staLocal>=today);
@@ -483,7 +488,7 @@ function ingest(text,src){
   renderDays();
   $("dayCard").classList.remove("hidden");
   warnCut = t.indexOf("END:VCALENDAR")<0;
-  say(`${duties.length} Flugtage geladen (${src}).`+(warnCut?" ACHTUNG: Feed wirkt abgeschnitten.":""), warnCut?"err":"ok");
+  say(`${duties.length} Flugtage · Roster-Stand ${stamp}`+(warnCut?" · ACHTUNG: Feed wirkt abgeschnitten.":""), warnCut?"err":"ok");
   makePDF();
   return true;
 }
@@ -514,8 +519,8 @@ function makePDF(){
     const url=URL.createObjectURL(lastBlob);
     $("prev").src=url; $("prev").classList.remove("hidden");
     $("btnShare").classList.remove("hidden");
-    say("PDF für "+lastName.slice(9,19)+" bereit."
-        +(warnCut?" ACHTUNG: Roster kam unvollständig an – spätere Flugtage können fehlen.":""),
+    say("PDF für "+lastName.slice(9,19)+" bereit · Roster-Stand "+stamp
+        +(warnCut?" · ACHTUNG: Roster kam unvollständig an, spätere Flugtage können fehlen.":""),
         warnCut?"err":"ok");
   }catch(e){ say("PDF fehlgeschlagen: "+e.message,"err"); }
 }
