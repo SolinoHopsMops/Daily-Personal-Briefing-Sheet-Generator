@@ -438,9 +438,22 @@ const say=(msg,cls="")=>{ const s=$("status"); s.textContent=msg; s.className=cl
 const store=(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} };
 const load =k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } };
 
+function peek(t){
+  const p=(t||"").trim().replace(/\s+/g," ").slice(0,60);
+  return p ? ' Anfang: "'+p+(t.trim().length>60?"…":"")+'"' : " (leer)";
+}
 function ingest(text,src){
-  if(!text || text.indexOf("BEGIN:VCALENDAR")<0){
-    say("Das sieht nicht nach einem Kalender-Feed aus.","err"); return false;
+  if(!text || !text.trim()){ say(`Nichts erhalten (${src}).`,"err"); return false; }
+  const t=text.trim();
+  /* Häufigster Fall: es wurde die Adresse kopiert, nicht der Inhalt. */
+  if(/^https?:\/\/\S+$/i.test(t)){
+    say("Das war eine Adresse, kein Kalenderinhalt – versuche Direktabruf …");
+    $("url").value=t; store("url",t); doFetch(t); return false;
+  }
+  if(t.indexOf("BEGIN:VCALENDAR")<0){
+    const html=/^<|<html|<!doctype/i.test(t);
+    say(`Kein Kalender-Feed (${src}).`+(html?" Es kam eine Webseite zurück – evtl. Login- oder Fehlerseite.":"")+peek(t),"err");
+    return false;
   }
   const legs=parseICS(text);
   if(!legs.length){ say("Feed gelesen, aber keine Flüge darin gefunden.","err"); return false; }
@@ -503,7 +516,7 @@ $("btnPaste").onclick=async()=>{
     const txt=await navigator.clipboard.readText();
     if(ingest(txt,"Zwischenablage")) $("btnPdf").scrollIntoView({behavior:"smooth",block:"center"});
   }catch(e){
-    say("Zwischenablage nicht lesbar. Text unten manuell einfügen.","err");
+    say("Zwischenablage nicht lesbar ("+(e.message||e)+"). Text unten manuell einfügen.","err");
   }
 };
 $("btnFile").onclick=()=>$("file").click();
@@ -515,26 +528,39 @@ $("file").onchange=e=>{
 };
 $("btnRaw").onclick=()=>ingest($("raw").value.trim(),"manuell");
 
-$("btnFetch").onclick=async()=>{
-  const u=$("url").value.trim();
-  if(!u){ say("Bitte Feed-URL eintragen.","err"); return; }
-  store("url",u);
+async function doFetch(u){
   say("Rufe Feed ab …");
   try{
     const r=await fetch(u,{cache:"no-store"});
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    ingest(await r.text(),"Direktabruf");
+    if(!r.ok){
+      say(`Server antwortete mit HTTP ${r.status} ${r.statusText||""}. Feed-URL prüfen.`,"err");
+      return;
+    }
+    const ct=r.headers.get("content-type")||"unbekannt";
+    const body=await r.text();
+    if(body.indexOf("BEGIN:VCALENDAR")<0){
+      say(`Antwort erhalten (${ct}), aber kein Kalender darin.`+peek(body),"err");
+      return;
+    }
+    ingest(body,"Direktabruf");
   }catch(e){
-    say("Direktabruf blockiert (CORS). Nutze Kurzbefehl oder Datei.","err");
+    say("Direktabruf vom Browser blockiert (CORS/Netzwerk: "+(e.message||e)+"). Weg über Kurzbefehl oder Datei nutzen.","err");
   }
+}
+$("btnFetch").onclick=()=>{
+  const u=$("url").value.trim();
+  if(!u){ say("Bitte Feed-URL eintragen.","err"); return; }
+  store("url",u); doFetch(u);
 };
 
 /* Start: gespeicherte URL vorbelegen, letzten Roster anzeigen */
 (function(){
   const u=load("url"); if(u) $("url").value=u;
   const cached=load("ics");
-  if(cached && ingest(cached,"zuletzt geladen")) say("Zuletzt geladener Roster. Für aktuelle Daten neu einfügen.","");
-  if(u) $("btnFetch").click();
+  const had = cached && ingest(cached,"zuletzt geladen");
+  if(had) say("Zuletzt geladener Roster – aktualisiere …","");
+  if(u) doFetch(u);
+  else if(had) say("Zuletzt geladener Roster. Für aktuelle Daten neu laden.","");
 })();
 </script>
 </body>
