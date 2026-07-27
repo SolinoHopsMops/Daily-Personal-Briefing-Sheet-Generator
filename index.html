@@ -456,9 +456,15 @@ function ingest(text,src){
   }
   /* Manche Shortcuts-Ketten liefern den Feed base64-codiert. */
   if(t.indexOf("BEGIN:VCALENDAR")<0 && /^[A-Za-z0-9+/=\s]{200,}$/.test(t)){
-    try{ const dec=atob(t.replace(/\s+/g,""));
-      if(dec.indexOf("BEGIN:VCALENDAR")>=0) return ingest(dec,src+", base64");
-    }catch(e){}
+    /* Zwei Varianten: unveraendert, und mit Leerzeichen->"+" (manche Ebenen
+       wandeln das Plus einer base64-Zeichenkette in ein Leerzeichen um). */
+    for(const cand of [t.replace(/\s+/g,""), t.replace(/ /g,"+").replace(/[\r\n\t]/g,"")]){
+      try{
+        const bin=atob(cand);
+        const dec=new TextDecoder("utf-8").decode(Uint8Array.from(bin,c=>c.charCodeAt(0)));
+        if(dec.indexOf("BEGIN:VCALENDAR")>=0) return ingest(dec,src+", base64");
+      }catch(e){}
+    }
   }
   if(t.indexOf("BEGIN:VCALENDAR")<0){
     const html=/^<|<html|<!doctype/i.test(t);
@@ -555,8 +561,8 @@ async function doFetch(u,silent){
     ingest(body,"Direktabruf");
   }catch(e){
     store("direct","blocked");
-    if(silent) say("Bereit &ndash; auf „Aus Zwischenablage einfügen“ tippen.","");
-    else say("Direktabruf vom Browser blockiert (CORS/Netzwerk: "+(e.message||e)+"). Nutze den Kurzbefehl &ndash; er umgeht diese Sperre.","err");
+    if(silent) say("Bereit – auf „Aus Zwischenablage einfügen“ tippen.","");
+    else say("Direktabruf vom Browser blockiert (CORS/Netzwerk: "+(e.message||e)+"). Nutze den Kurzbefehl – er umgeht diese Sperre.","err");
   }
 }
 $("btnFetch").onclick=()=>{
@@ -572,11 +578,11 @@ $("btnFetch").onclick=()=>{
   const m=(location.hash||"").match(/[#&]ics=([\s\S]+)$/);
   if(m){
     let raw="";
-    try{ raw=decodeURIComponent(m[1].replace(/\+/g," ")); }catch(e){ raw=m[1]; }
+    try{ raw=decodeURIComponent(m[1]); }catch(e){ raw=m[1]; }
     /* Adresse sofort bereinigen: Rosterdaten nicht im Verlauf stehen lassen */
     try{ history.replaceState(null,"",location.pathname+location.search); }catch(e){}
     if(ingest(raw,"Kurzbefehl")) return;
-    say("Kurzbefehl-Daten unvollständig &ndash; die Adresse wurde vermutlich gekürzt. Nimm „Aus Zwischenablage einfügen“.","err");
+    say("Kurzbefehl-Daten unvollständig – die Adresse wurde vermutlich gekürzt. Nimm „Aus Zwischenablage einfügen“.","err");
     return;
   }
 
@@ -585,7 +591,7 @@ $("btnFetch").onclick=()=>{
   if(had) say("Zuletzt geladener Roster – aktualisiere …","");
   if(u && load("direct")!=="blocked") doFetch(u,true);
   else say(had ? "Zuletzt geladener Roster angezeigt. Für heute: „Aus Zwischenablage einfügen“."
-              : "Bereit &ndash; auf „Aus Zwischenablage einfügen“ tippen.","");
+              : "Bereit – auf „Aus Zwischenablage einfügen“ tippen.","");
 })();
 </script>
 </body>
