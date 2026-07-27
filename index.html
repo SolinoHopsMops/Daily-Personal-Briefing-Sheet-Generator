@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Daily Briefing Sheet</title>
+<style>
+  :root{
+    --ink:#14171a; --soft:#5c6570; --line:#d8dde2; --bg:#f2f4f6;
+    --accent:#1f4e79; --ok:#12703a; --warn:#c8102e;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       line-height:1.5;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .wrap{max-width:640px;margin:0 auto;padding:22px 18px 60px}
+
+  h1{font-size:20px;margin:0;letter-spacing:-.01em}
+  .tag{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+       color:var(--soft);margin-bottom:6px}
+  .lead{color:var(--soft);font-size:14px;margin:6px 0 22px}
+
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+  .card h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--soft);
+           margin:0 0 10px;font-weight:600}
+
+  button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:14px 16px;
+         width:100%;cursor:pointer;background:var(--accent);color:#fff;margin-top:8px}
+  button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line);font-weight:500}
+  button:active{opacity:.75}
+  input[type=url],textarea{width:100%;font:inherit;font-size:15px;padding:12px;
+    border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+  textarea{font-family:var(--mono);font-size:11px;height:110px}
+  label.fld{display:block;font-size:12px;color:var(--soft);margin-bottom:6px}
+
+  #status{font-size:13px;color:var(--soft);min-height:20px;margin-top:10px}
+  #status.err{color:var(--warn)}
+  #status.ok{color:var(--ok)}
+
+  .days{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
+  .day{flex:0 0 auto;border:1px solid var(--line);background:#fff;border-radius:9px;
+       padding:8px 11px;font-family:var(--mono);font-size:12px;cursor:pointer;white-space:nowrap}
+  .day.sel{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .day small{display:block;font-size:9.5px;opacity:.7;letter-spacing:.04em}
+
+  details{margin-top:6px}
+  summary{cursor:pointer;font-size:13px;color:var(--accent);font-weight:600;padding:6px 0}
+  ol{padding-left:20px;font-size:13.5px;color:var(--soft)}
+  ol li{margin:7px 0}
+  code{font-family:var(--mono);font-size:12px;background:var(--bg);padding:2px 5px;border-radius:4px;
+       word-break:break-all}
+  .note{font-size:12px;color:var(--soft);margin-top:10px}
+  .disclaimer{font-size:11.5px;color:var(--soft);border-top:1px solid var(--line);
+              margin-top:26px;padding-top:14px}
+  iframe{width:100%;height:420px;border:1px solid var(--line);border-radius:10px;background:#fff;margin-top:10px}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="tag">A220 · Short Haul</div>
+  <h1>Daily Briefing Sheet</h1>
+  <p class="lead">Roster rein, druckfertiges A4-Blatt raus. Alles läuft im Browser &ndash;
+     deine Rosterdaten verlassen dieses Gerät nicht.</p>
+
+  <div class="card">
+    <h2>Roster laden</h2>
+    <button id="btnPaste">Aus Zwischenablage einfügen</button>
+    <button class="ghost" id="btnFile">.ics-Datei wählen</button>
+    <input type="file" id="file" accept=".ics,text/calendar" class="hidden">
+    <div id="status">Bereit.</div>
+
+    <details id="urlBox">
+      <summary>Feed-URL hinterlegen (versucht Direktabruf)</summary>
+      <label class="fld" for="url">Persönlicher Schedule-Feed</label>
+      <input type="url" id="url" placeholder="https://schedule.swiss.com/…/….ics">
+      <button class="ghost" id="btnFetch">Jetzt abrufen</button>
+      <p class="note">Klappt nur, wenn der Anbieter Cross-Origin-Abrufe erlaubt.
+         Sonst bleibt der Weg über Kurzbefehl oder Datei.</p>
+    </details>
+
+    <details>
+      <summary>Text manuell einfügen</summary>
+      <textarea id="raw" placeholder="BEGIN:VCALENDAR …"></textarea>
+      <button class="ghost" id="btnRaw">Übernehmen</button>
+    </details>
+  </div>
+
+  <div class="card hidden" id="dayCard">
+    <h2>Flugtag</h2>
+    <div class="days" id="days"></div>
+    <button id="btnPdf">PDF erzeugen</button>
+    <button class="ghost hidden" id="btnShare">Teilen / Sichern</button>
+    <iframe id="prev" class="hidden" title="Vorschau"></iframe>
+  </div>
+
+  <div class="card">
+    <h2>Ein Tap vom Homescreen (iOS)</h2>
+    <details>
+      <summary>Kurzbefehl einrichten &ndash; einmalig, ca. 2 Minuten</summary>
+      <ol>
+        <li>App <b>Kurzbefehle</b> öffnen, <b>+</b> tippen.</li>
+        <li>Aktion <b>Inhalte von URL abrufen</b> hinzufügen, eigene Feed-URL eintragen.</li>
+        <li>Aktion <b>In die Zwischenablage kopieren</b> hinzufügen.</li>
+        <li>Aktion <b>URL öffnen</b> hinzufügen, Adresse dieser Seite eintragen.</li>
+        <li>Kurzbefehl benennen, dann über das Teilen-Symbol <b>Zum Home-Bildschirm</b>.</li>
+      </ol>
+      <p class="note">Danach: Icon tippen &rarr; diese Seite öffnet sich &rarr;
+         <b>Aus Zwischenablage einfügen</b> &rarr; PDF. Beim ersten Mal fragt iOS einmal
+         nach der Einfüge-Erlaubnis.</p>
+      <p class="note">Liefert die Aktion eine Datei statt Text, hänge davor
+         <b>Text aus Eingabe abrufen</b> ein.</p>
+    </details>
+  </div>
+
+  <p class="disclaimer">
+    Inoffizielles Hilfsmittel, kein Firmendokument und kein Ersatz für Briefing-Unterlagen.
+    Die ASS-Bewertung ist eine Auslegung des OM A Appendix und im Zweifel gegen das
+    Originaldokument zu prüfen; alle übrigen Felder sind Leerfelder zum Selbstausfüllen.
+    Verantwortung für den operationellen Gebrauch bleibt beim Anwender.
+  </p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+/* ===========================================================================
+   1  KONFIGURATION
+   =========================================================================== */
+const HUBS = ["ZRH","GVA"];
+const BRIEF_OFFSET = { ZRH:67, GVA:57 };
+const CREWBUS_OFFSET = { ZRH:50 };
+const DH_CREWBUS_OFFSET = 25;
+const PASSIVE_CODES = ["DH","PAX","TR"];
+const DUTY_SPLIT_H = 6;
+
+const EU_EFTA = new Set(["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IS","IE","IT","LV","LT","LU","MT","NL","NO","PL","PT","RO","SK","SI","ES","SE","CH"]);
+const CUR_EXEMPT_CTY = new Set(["CA"]);
+const CUR_EXEMPT_APT = new Set(["BEG"]);
+const PREV_OK_CTY = new Set(["CA","GB","US"]);
+const PREV_OK_APT = new Set(["BEG","SIN"]);
+
+const APT = {
+ZRH:"CH",GVA:"CH",BSL:"CH",BRN:"CH",LUG:"CH",SIR:"CH",
+FRA:"DE",MUC:"DE",BER:"DE",HAM:"DE",DUS:"DE",STR:"DE",NUE:"DE",DRS:"DE",LEJ:"DE",
+HAJ:"DE",CGN:"DE",BRE:"DE",FMO:"DE",FDH:"DE",SCN:"DE",FKB:"DE",
+CDG:"FR",ORY:"FR",NCE:"FR",LYS:"FR",MRS:"FR",BOD:"FR",TLS:"FR",NTE:"FR",AJA:"FR",
+FSC:"FR",BIA:"FR",CLY:"FR",MPL:"FR",SXB:"FR",BIQ:"FR",LIL:"FR",
+FCO:"IT",MXP:"IT",LIN:"IT",BGY:"IT",VCE:"IT",TSF:"IT",NAP:"IT",FLR:"IT",BLQ:"IT",
+PSA:"IT",CTA:"IT",PMO:"IT",BRI:"IT",CAG:"IT",OLB:"IT",TRN:"IT",GOA:"IT",AHO:"IT",
+BDS:"IT",VRN:"IT",TRS:"IT",REG:"IT",LMP:"IT",
+MAD:"ES",BCN:"ES",VLC:"ES",AGP:"ES",PMI:"ES",IBZ:"ES",ALC:"ES",SVQ:"ES",BIO:"ES",
+LPA:"ES",TFS:"ES",TFN:"ES",ACE:"ES",FUE:"ES",SCQ:"ES",MAH:"ES",XRY:"ES",GRO:"ES",SPC:"ES",
+LIS:"PT",OPO:"PT",FAO:"PT",FNC:"PT",PDL:"PT",TER:"PT",
+ATH:"GR",SKG:"GR",HER:"GR",RHO:"GR",JMK:"GR",JTR:"GR",CFU:"GR",ZTH:"GR",KGS:"GR",
+CHQ:"GR",PVK:"GR",EFL:"GR",SMI:"GR",JSI:"GR",KLX:"GR",AOK:"GR",
+VIE:"AT",GRZ:"AT",SZG:"AT",INN:"AT",KLU:"AT",LNZ:"AT",
+AMS:"NL",EIN:"NL",RTM:"NL",MST:"NL",BRU:"BE",CRL:"BE",LUX:"LU",
+DUB:"IE",ORK:"IE",SNN:"IE",CPH:"DK",BLL:"DK",AAL:"DK",AAR:"DK",
+ARN:"SE",BMA:"SE",GOT:"SE",MMX:"SE",OSL:"NO",BGO:"NO",SVG:"NO",TRD:"NO",TOS:"NO",
+HEL:"FI",KEF:"IS",
+WAW:"PL",WMI:"PL",KRK:"PL",GDN:"PL",WRO:"PL",KTW:"PL",POZ:"PL",RZE:"PL",
+PRG:"CZ",BRQ:"CZ",BTS:"SK",KSC:"SK",BUD:"HU",DEB:"HU",
+OTP:"RO",CLJ:"RO",TSR:"RO",IAS:"RO",SBZ:"RO",BBU:"RO",
+SOF:"BG",VAR:"BG",BOJ:"BG",PDV:"BG",
+ZAG:"HR",SPU:"HR",DBV:"HR",ZAD:"HR",PUY:"HR",RJK:"HR",OSI:"HR",
+LJU:"SI",TLL:"EE",RIX:"LV",VNO:"LT",KUN:"LT",PLQ:"LT",LCA:"CY",PFO:"CY",MLA:"MT",
+LHR:"GB",LGW:"GB",LCY:"GB",STN:"GB",LTN:"GB",MAN:"GB",BHX:"GB",EDI:"GB",GLA:"GB",
+BRS:"GB",NCL:"GB",LPL:"GB",SOU:"GB",ABZ:"GB",BFS:"GB",JER:"GB",GCI:"GB",IOM:"GB",
+BEG:"RS",INI:"RS",TGD:"ME",TIV:"ME",TIA:"AL",SKP:"MK",OHD:"MK",PRN:"XK",
+SJJ:"BA",TZL:"BA",BNX:"BA",
+IST:"TR",SAW:"TR",ESB:"TR",ADB:"TR",AYT:"TR",BJV:"TR",DLM:"TR",GZP:"TR",
+TLV:"IL",AMM:"JO",BEY:"LB",CAI:"EG",HRG:"EG",SSH:"EG",RMF:"EG",HBE:"EG",
+RAK:"MA",CMN:"MA",AGA:"MA",RBA:"MA",TNG:"MA",FEZ:"MA",NDR:"MA",OUD:"MA",
+TUN:"TN",DJE:"TN",MIR:"TN",NBE:"TN",ALG:"DZ",ORN:"DZ",
+KBP:"UA",IEV:"UA",KIV:"MD",TBS:"GE",EVN:"AM",GYD:"AZ",
+DXB:"AE",AUH:"AE",DOH:"QA",RUH:"SA",JED:"SA",KWI:"KW",BAH:"BH",MCT:"OM",
+JFK:"US",EWR:"US",BOS:"US",ORD:"US",LAX:"US",SFO:"US",MIA:"US",IAD:"US",PHL:"US",SEA:"US",
+YUL:"CA",YYZ:"CA",YVR:"CA",YYC:"CA",
+SIN:"SG",HKG:"HK",NRT:"JP",HND:"JP",PVG:"CN",PEK:"CN",BOM:"IN",DEL:"IN",BKK:"TH",
+JNB:"ZA",NBO:"KE",GRU:"BR",EZE:"AR"
+};
+
+/* ===========================================================================
+   2  ICS PARSING
+   =========================================================================== */
+const LEG_RX = /^([A-Z]{2}\s?\d{1,4}[A-Z]?)\s+([A-Z]{3})\s+(\d{4})\s+([A-Z]{3})\s+(\d{4})\s+(\S+)\s*\[([^\]]+)\]/;
+
+function parseICS(text){
+  const t = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").replace(/\n[ \t]/g,"");
+  const legs = [];
+  for(const raw of t.split("BEGIN:VEVENT").slice(1)){
+    const body = raw.split("END:VEVENT")[0];
+    const f = n => { const m = body.match(new RegExp("^"+n+"[^:\\n]*:(.*)$","m")); return m?m[1].trim():""; };
+    const m = f("SUMMARY").match(LEG_RX);
+    if(!m) continue;
+    const stdU = icsDate(f("DTSTART"));
+    if(!stdU) continue;
+    const staU = icsDate(f("DTEND")) || stdU;
+    const code = m[7].split(/[\s,/]+/)[0].toUpperCase();
+    legs.push({
+      fno:m[1].replace(/\s+/g,""), from:m[2], to:m[4],
+      stdLT:m[3], staLT:m[5], typ:m[6], code,
+      passive:PASSIVE_CODES.includes(code),
+      stdU, staU,
+      stdLocal:toLocal(stdU,m[3]), staLocal:toLocal(staU,m[5])
+    });
+  }
+  legs.sort((a,b)=>a.stdU-b.stdU);
+  legs.forEach((l,i)=>{ l.ass = assStatus(l, i>0?legs[i-1]:null); });
+  return legs;
+}
+function icsDate(v){
+  const m=(v||"").match(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
+  return m ? new Date(Date.UTC(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6])) : null;
+}
+/* Lokale Wanduhrzeit aus UTC + LT-HHMM rekonstruieren */
+function toLocal(utc,hhmm){
+  const lt=(+hhmm.slice(0,2))*60+(+hhmm.slice(2));
+  const um=utc.getUTCHours()*60+utc.getUTCMinutes();
+  let off=((lt-um)%1440+1440)%1440;
+  if(off>840) off-=1440;
+  return new Date(utc.getTime()+off*60000);
+}
+function groupDuties(legs){
+  const out=[];
+  for(const l of legs){
+    const cur=out[out.length-1];
+    if(cur && (l.stdU-cur[cur.length-1].staU)/3600000 <= DUTY_SPLIT_H) cur.push(l);
+    else out.push([l]);
+  }
+  return out;
+}
+
+/* ---- ASS gem. OM A Appendix -------------------------------------------- */
+function assStatus(leg, prev){
+  if(leg.passive) return "DH";
+  const cty = APT[leg.from];
+  const exempt = CUR_EXEMPT_APT.has(leg.from) || (cty && (EU_EFTA.has(cty)||CUR_EXEMPT_CTY.has(cty)));
+  if(!exempt) return "REQ";
+  let prevApt=null;
+  if(prev && prev.to===leg.from){
+    const gapH=(leg.stdU-prev.staU)/3600000;
+    if(!HUBS.includes(leg.from) || gapH<2) prevApt=prev.from;
+  }
+  if(prevApt){
+    const pc=APT[prevApt];
+    const ok = PREV_OK_APT.has(prevApt) || (pc && (EU_EFTA.has(pc)||PREV_OK_CTY.has(pc)));
+    if(!ok) return "REQ";
+  }
+  if(APT[leg.to]==="US") return "REQ";
+  return "NOTREQ";
+}
+
+/* ===========================================================================
+   3  PDF  (A4 quer, Inhalt ausschliesslich auf der rechten Blatthälfte)
+   =========================================================================== */
+const X0=156.5, X1=288, CW=X1-X0, TOPY=9, BOTY=203;
+const INK=[20,23,26], SOFT=[92,101,112], RULE=[185,192,199], HAIR=[223,227,231],
+      RED=[200,16,46], GREEN=[18,112,58], BOXFILL=[241,244,246], WHITE=[255,255,255];
+const SP={xs:0.07, s:0.176, q:0.247, m:0.317, l:0.353, xl:0.564};
+const DOW=["SUN","MON","TUE","WED","THU","FRI","SAT"];
+const MON=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+const hm = s => s.slice(0,2)+":"+s.slice(2);
+function shift(t,minus){
+  const x=(((+t.slice(0,2))*60+(+t.slice(2))-minus)%1440+1440)%1440;
+  return String(Math.floor(x/60)).padStart(2,"0")+":"+String(x%60).padStart(2,"0");
+}
+
+function buildPDF(legs){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
+
+  /* Sperrung zeichenweise setzen: unabhaengig von jsPDF-Optionen und
+     die zurueckgegebene Breite ist exakt die gezeichnete. */
+  const lab=(x,y,txt,size,col,sp)=>{
+    doc.setFont("helvetica","normal"); doc.setFontSize(size); doc.setTextColor(...col);
+    let cx=x;
+    for(const ch of txt){ doc.text(ch,cx,y); cx+=doc.getTextWidth(ch)+sp; }
+    return cx-x;
+  };
+  const cbox=(x,yTop,txt,box)=>{
+    doc.setLineWidth(0.247); doc.setDrawColor(...INK);
+    doc.rect(x,yTop,box,box,"S");
+    doc.setFont("courier","bold"); doc.setFontSize(7.2); doc.setTextColor(...INK);
+    doc.text(txt,x+box+0.8,yTop+box-0.55);
+    return x+box+0.8+doc.getTextWidth(txt);
+  };
+  const wline=(x,y,w)=>{ doc.setLineWidth(0.212); doc.setDrawColor(...INK); doc.line(x,y,x+w,y); };
+  const badge=(xr,yTop,txt,kind)=>{
+    doc.setFont("courier","bold"); doc.setFontSize(6.6);
+    const w=doc.getTextWidth(txt)+2.8, h=3.9, x=xr-w;
+    if(kind==="REQ"){ doc.setFillColor(...RED); doc.setDrawColor(...RED); doc.setLineWidth(0.282);
+      doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...WHITE); }
+    else if(kind==="NOTREQ"){ doc.setFillColor(...WHITE); doc.setDrawColor(...GREEN); doc.setLineWidth(0.282);
+      doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...GREEN); }
+    else { doc.setFillColor(...WHITE); doc.setDrawColor(...RULE); doc.setLineWidth(0.212);
+      doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...SOFT); }
+    doc.setFont("courier","bold"); doc.setFontSize(6.6);
+    doc.text(txt,x+1.4,yTop+h-1.15);
+  };
+  const rbox=(x,yTop,w,h,title)=>{
+    doc.setLineWidth(0.317); doc.setDrawColor(...INK); doc.rect(x,yTop,w,h,"S");
+    const head=4.4;
+    doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(x,yTop+head,x+w,yTop+head);
+    lab(x+1.6,yTop+head-1.5,title,6.0,INK,SP.m);
+    doc.setLineWidth(0.141); doc.setDrawColor(...HAIR);
+    for(let yy=yTop+head+6; yy<yTop+h-2.5; yy+=6) doc.line(x+1.6,yy,x+w-1.6,yy);
+  };
+
+  const d=legs[0].stdLocal;
+  const firstActive=legs.find(l=>!l.passive)||legs[0];
+  const leadDH=legs[0].passive?legs[0]:null;
+  const off=leadDH?null:BRIEF_OFFSET[firstActive.from];
+  const briefing=off?shift(firstActive.stdLT,off):null;
+
+  let busL1,busL2,busVal,busNote;
+  if(leadDH){
+    busL1="CREWBUS ABFAHRT"; busL2="DEADHEAD";
+    busVal=shift(leadDH.stdLT,DH_CREWBUS_OFFSET);
+    busNote=`LT ${leadDH.from}  ·  DH ${leadDH.fno} ${leadDH.from}-${leadDH.to} ${hm(leadDH.stdLT)}  -${DH_CREWBUS_OFFSET}'`;
+  } else if(CREWBUS_OFFSET[firstActive.from]){
+    busL1="CREWBUS"; busL2="ABFAHRT";
+    busVal=shift(firstActive.stdLT,CREWBUS_OFFSET[firstActive.from]);
+    busNote=`LT ${firstActive.from}  ·  STD -${CREWBUS_OFFSET[firstActive.from]}'`;
+  } else {
+    busL1="CREWBUS"; busL2="ABFAHRT"; busVal=null; busNote="nur bei Start ab ZRH";
+  }
+  const briefNote = leadDH ? "entfällt – Tagesbeginn als Deadhead"
+    : (off ? `LT ${firstActive.from}  ·  STD ${hm(firstActive.stdLT)}  -${off}'`
+           : "Start ausserhalb ZRH/GVA – manuell");
+
+  let y=TOPY;
+
+  /* Kopf */
+  doc.setFont("courier","bold"); doc.setFontSize(15); doc.setTextColor(...INK);
+  doc.text(`${DOW[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2,"0")} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`, X0, y+5.4);
+  lab(X0,y+9.2,`DAILY BRIEFING SHEET  ·  ${legs.length} LEG${legs.length>1?"S":""}`,5.8,SOFT,SP.l);
+  doc.setFont("helvetica","normal"); doc.setFontSize(5.5);
+  const swid=doc.getTextWidth("START")+SP.l*5;
+  lab(X1-swid,y+2.4,"START",5.5,SOFT,SP.l);
+  doc.setFont("courier","bold"); doc.setFontSize(11); doc.setTextColor(...INK);
+  doc.text(legs[0].from, X1-doc.getTextWidth(legs[0].from), y+8.6);
+  doc.setLineWidth(0.388); doc.setDrawColor(...INK); doc.line(X0,y+11.4,X1,y+11.4);
+  y+=13.8;
+
+  /* Zeitkacheln */
+  const ch=19, cwid=(CW-3)/2;
+  [[["EXPECTED ARRIVAL","CREW BRIEFING"],briefing,briefNote,false],
+   [[busL1,busL2],busVal,busNote,!!leadDH]].forEach((card,i)=>{
+    const [lines,val,note,fill]=card;
+    const x=X0+i*(cwid+3);
+    doc.setLineWidth(0.317); doc.setDrawColor(...(val?INK:RULE));
+    doc.setFillColor(...(fill?BOXFILL:WHITE));
+    doc.rect(x,y,cwid,ch,fill?"FD":"S");
+    const lc = val?SOFT:RULE;
+    lab(x+2,y+3.4,lines[0],6.0,lc,SP.m);
+    lab(x+2,y+6.0,lines[1],6.0,lc,SP.m);
+    doc.setFont("courier","bold"); doc.setFontSize(16); doc.setTextColor(...(val?INK:RULE));
+    doc.text(val||"--:--", x+2, y+13.6);
+    lab(x+2,y+17.0,note,5.6,SOFT,SP.xs);
+  });
+  y+=ch+2.6;
+
+  /* Schnellfelder */
+  const qh=11.5, gap=2.5;
+  const wq=[17,20,0,33]; wq[2]=CW-(17+20+33+gap*3);
+  const titles=["STAND","BRF ROOM","FIRST SLOT / ETD","BAGGAGE LABELN"];
+  let x=X0;
+  wq.forEach((w,i)=>{
+    doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.rect(x,y,w,qh,"S");
+    lab(x+1.6,y+3.4,titles[i],5.7,SOFT,SP.q);
+    if(i===3){
+      const xx=cbox(x+1.6,y+qh-3.2-3.1,"YES",3.1);
+      cbox(xx+3.0,y+qh-3.2-3.1,"NO",3.1);
+    } else wline(x+1.6,y+qh-3.2,w-3.2);
+    x+=w+gap;
+  });
+  y+=qh+3.4;
+
+  /* Flights */
+  const tw=lab(X0,y+2.0,"FLIGHTS",6.0,SOFT,SP.xl)+2.5;
+  doc.setLineWidth(0.212); doc.setDrawColor(...HAIR); doc.line(X0+tw,y+1.4,X1,y+1.4);
+  y+=4.6;
+
+  const lh=11.4;
+  for(const l of legs){
+    doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(X0,y,X1,y);
+    doc.setFont("courier","bold"); doc.setFontSize(9.4);
+    doc.setTextColor(...(l.passive?SOFT:INK));
+    doc.text(l.fno,X0,y+4.5);
+    const route=`${l.from} ${hm(l.stdLT)} > ${l.to} ${hm(l.staLT)}`;
+    doc.text(route,X0+17.5,y+4.5);
+    const rw=doc.getTextWidth(route);
+    lab(X0+17.5+rw+1.6,y+4.5,l.typ+(l.passive?"  "+l.code:""),6.4,SOFT,SP.xs);
+    badge(X1,y+1.5,{REQ:"ASS REQ",NOTREQ:"ASS NOT REQ",DH:"DEADHEAD"}[l.ass],l.ass);
+
+    const fy=y+9.6;
+    let fx=X0;
+    fx+=lab(fx,fy,"EXP. FLT TIME",5.8,SOFT,SP.s)+1.4;
+    wline(fx,fy+0.3,13); fx+=13+4;
+    if(!HUBS.includes(l.to) && !l.passive){
+      for(const [name,o] of [["APU",["Y","N"]],["NADP",["1","2"]],["MAINT",["Y","N"]],["REVERSE",["Y","N"]]]){
+        fx+=lab(fx,fy,name,5.8,SOFT,SP.s)+1.4;
+        fx=cbox(fx,fy-2.1,o[0],2.9)+1.0;
+        fx=cbox(fx,fy-2.1,o[1],2.9)+2.8;
+      }
+    }
+    y+=lh;
+  }
+  doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(X0,y,X1,y);
+  y+=2.8;
+
+  /* Schreibfelder */
+  const avail=BOTY-4.2-y-2.6;
+  const hRem=avail*0.44, hCab=avail*0.56;
+  rbox(X0,y,CW,hRem,"REMARKS");
+  y+=hRem+2.6;
+  rbox(X0,y,CW,hCab,"CABIN BRIEFING  (WX, TECHNISCHES, PADs, ROLLZEIT, ...)");
+
+  /* Fuss */
+  lab(X0,BOTY,"ASS gem. OM A Appendix / OM A 10.3.1  ·  Abflug ZRH/GVA: Vorflug des A/C aus dem LX-Netz angenommen",5.2,SOFT,SP.xs);
+  doc.setFont("helvetica","normal"); doc.setFontSize(5.2); doc.setTextColor(...SOFT);
+  doc.text("Alle Zeiten LT", X1-doc.getTextWidth("Alle Zeiten LT"), BOTY);
+
+  return doc;
+}
+
+/* ===========================================================================
+   4  UI
+   =========================================================================== */
+const $ = id => document.getElementById(id);
+let duties=[], sel=0, lastBlob=null, lastName="";
+
+const say=(msg,cls="")=>{ const s=$("status"); s.textContent=msg; s.className=cls; };
+const store=(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} };
+const load =k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } };
+
+function ingest(text,src){
+  if(!text || text.indexOf("BEGIN:VCALENDAR")<0){
+    say("Das sieht nicht nach einem Kalender-Feed aus.","err"); return false;
+  }
+  const legs=parseICS(text);
+  if(!legs.length){ say("Feed gelesen, aber keine Flüge darin gefunden.","err"); return false; }
+  store("ics",text);
+  duties=groupDuties(legs);
+  const today=new Date(); today.setHours(0,0,0,0);
+  sel=duties.findIndex(d=>d[d.length-1].staLocal>=today);
+  if(sel<0) sel=duties.length-1;
+  renderDays();
+  $("dayCard").classList.remove("hidden");
+  say(`${duties.length} Flugtage geladen (${src}).`,"ok");
+  return true;
+}
+
+function renderDays(){
+  const box=$("days"); box.innerHTML="";
+  duties.forEach((d,i)=>{
+    const b=document.createElement("button");
+    b.className="day"+(i===sel?" sel":"");
+    const route=d.map(l=>l.from).concat(d[d.length-1].to).join("-");
+    b.innerHTML=`${d[0].stdLocal.toISOString().slice(0,10)}<small>${route}</small>`;
+    b.onclick=()=>{ sel=i; renderDays(); resetOut(); };
+    box.appendChild(b);
+  });
+  box.children[sel] && box.children[sel].scrollIntoView({block:"nearest",inline:"center"});
+}
+function resetOut(){
+  lastBlob=null; $("btnShare").classList.add("hidden");
+  $("prev").classList.add("hidden"); $("prev").removeAttribute("src");
+}
+
+$("btnPdf").onclick=()=>{
+  if(!duties.length) return;
+  try{
+    const doc=buildPDF(duties[sel]);
+    lastName="Briefing_"+duties[sel][0].stdLocal.toISOString().slice(0,10)+".pdf";
+    lastBlob=doc.output("blob");
+    const url=URL.createObjectURL(lastBlob);
+    $("prev").src=url; $("prev").classList.remove("hidden");
+    $("btnShare").classList.remove("hidden");
+    say("PDF erzeugt.","ok");
+    if(!(navigator.canShare && navigator.canShare({files:[new File([lastBlob],lastName,{type:"application/pdf"})]}))){
+      const a=document.createElement("a"); a.href=url; a.download=lastName; a.click();
+    }
+  }catch(e){ say("PDF fehlgeschlagen: "+e.message,"err"); }
+};
+
+$("btnShare").onclick=async()=>{
+  if(!lastBlob) return;
+  const file=new File([lastBlob],lastName,{type:"application/pdf"});
+  try{
+    if(navigator.canShare && navigator.canShare({files:[file]})) await navigator.share({files:[file],title:lastName});
+    else { const a=document.createElement("a"); a.href=URL.createObjectURL(lastBlob); a.download=lastName; a.click(); }
+  }catch(e){}
+};
+
+$("btnPaste").onclick=async()=>{
+  say("Warte auf Zwischenablage …");
+  try{
+    const txt=await navigator.clipboard.readText();
+    if(ingest(txt,"Zwischenablage")) $("btnPdf").scrollIntoView({behavior:"smooth",block:"center"});
+  }catch(e){
+    say("Zwischenablage nicht lesbar. Text unten manuell einfügen.","err");
+  }
+};
+$("btnFile").onclick=()=>$("file").click();
+$("file").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>ingest(r.result,"Datei");
+  r.readAsText(f);
+};
+$("btnRaw").onclick=()=>ingest($("raw").value.trim(),"manuell");
+
+$("btnFetch").onclick=async()=>{
+  const u=$("url").value.trim();
+  if(!u){ say("Bitte Feed-URL eintragen.","err"); return; }
+  store("url",u);
+  say("Rufe Feed ab …");
+  try{
+    const r=await fetch(u,{cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    ingest(await r.text(),"Direktabruf");
+  }catch(e){
+    say("Direktabruf blockiert (CORS). Nutze Kurzbefehl oder Datei.","err");
+  }
+};
+
+/* Start: gespeicherte URL vorbelegen, letzten Roster anzeigen */
+(function(){
+  const u=load("url"); if(u) $("url").value=u;
+  const cached=load("ics");
+  if(cached && ingest(cached,"zuletzt geladen")) say("Zuletzt geladener Roster. Für aktuelle Daten neu einfügen.","");
+  if(u) $("btnFetch").click();
+})();
+</script>
+</body>
+</html>
