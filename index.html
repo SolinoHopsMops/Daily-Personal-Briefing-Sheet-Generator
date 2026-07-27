@@ -92,8 +92,8 @@
   <div class="card hidden" id="dayCard">
     <h2>Flugtag</h2>
     <div class="days" id="days"></div>
-    <button id="btnPdf">PDF erzeugen</button>
-    <button class="ghost hidden" id="btnShare">Teilen / Sichern</button>
+    <button id="btnPdf">PDF neu erzeugen</button>
+    <button class="hidden" id="btnShare">PDF sichern / teilen</button>
     <iframe id="prev" class="hidden" title="Vorschau"></iframe>
   </div>
 
@@ -104,15 +104,19 @@
       <ol>
         <li>App <b>Kurzbefehle</b> öffnen, <b>+</b> tippen.</li>
         <li>Aktion <b>Inhalte von URL abrufen</b> hinzufügen, eigene Feed-URL eintragen.</li>
-        <li>Aktion <b>In die Zwischenablage kopieren</b> hinzufügen.</li>
-        <li>Aktion <b>URL öffnen</b> hinzufügen, Adresse dieser Seite eintragen.</li>
+        <li>Aktion <b>Text aus Eingabe abrufen</b> hinzufügen &ndash; sonst entsteht ein
+            iCalendar-Objekt statt Text.</li>
+        <li>Aktion <b>URL codieren</b> hinzufügen.</li>
+        <li>Aktion <b>URLs öffnen</b> hinzufügen. Ins Feld die Adresse dieser Seite tippen,
+            direkt dahinter <code>#ics=</code> und dann die Variable <b>URL-codierter Text</b>
+            einsetzen.</li>
         <li>Kurzbefehl benennen, dann über das Teilen-Symbol <b>Zum Home-Bildschirm</b>.</li>
       </ol>
-      <p class="note">Danach: Icon tippen &rarr; diese Seite öffnet sich &rarr;
-         <b>Aus Zwischenablage einfügen</b> &rarr; PDF. Beim ersten Mal fragt iOS einmal
-         nach der Einfüge-Erlaubnis.</p>
-      <p class="note">Liefert die Aktion eine Datei statt Text, hänge davor
-         <b>Text aus Eingabe abrufen</b> ein.</p>
+      <p class="note">Danach genügt ein Tap auf das Icon: die Seite liest den Roster aus der
+         Adresse, baut das PDF und löscht die Daten sofort wieder aus der Adresszeile.</p>
+      <p class="note">Meldet die Seite „Adresse wurde gekürzt“, ist der Roster für diesen Weg
+         zu lang &ndash; dann statt Schritt 3 und 4 die Aktion <b>In die Zwischenablage kopieren</b>
+         nutzen und die Seite normal öffnen.</p>
     </details>
   </div>
 
@@ -450,6 +454,12 @@ function ingest(text,src){
     say("Das war eine Adresse, kein Kalenderinhalt – versuche Direktabruf …");
     $("url").value=t; store("url",t); doFetch(t); return false;
   }
+  /* Manche Shortcuts-Ketten liefern den Feed base64-codiert. */
+  if(t.indexOf("BEGIN:VCALENDAR")<0 && /^[A-Za-z0-9+/=\s]{200,}$/.test(t)){
+    try{ const dec=atob(t.replace(/\s+/g,""));
+      if(dec.indexOf("BEGIN:VCALENDAR")>=0) return ingest(dec,src+", base64");
+    }catch(e){}
+  }
   if(t.indexOf("BEGIN:VCALENDAR")<0){
     const html=/^<|<html|<!doctype/i.test(t);
     say(`Kein Kalender-Feed (${src}).`+(html?" Es kam eine Webseite zurück – evtl. Login- oder Fehlerseite.":"")+peek(t),"err");
@@ -465,6 +475,7 @@ function ingest(text,src){
   renderDays();
   $("dayCard").classList.remove("hidden");
   say(`${duties.length} Flugtage geladen (${src}).`,"ok");
+  makePDF();
   return true;
 }
 
@@ -475,7 +486,7 @@ function renderDays(){
     b.className="day"+(i===sel?" sel":"");
     const route=d.map(l=>l.from).concat(d[d.length-1].to).join("-");
     b.innerHTML=`${d[0].stdLocal.toISOString().slice(0,10)}<small>${route}</small>`;
-    b.onclick=()=>{ sel=i; renderDays(); resetOut(); };
+    b.onclick=()=>{ sel=i; renderDays(); makePDF(); };
     box.appendChild(b);
   });
   box.children[sel] && box.children[sel].scrollIntoView({block:"nearest",inline:"center"});
@@ -485,7 +496,7 @@ function resetOut(){
   $("prev").classList.add("hidden"); $("prev").removeAttribute("src");
 }
 
-$("btnPdf").onclick=()=>{
+function makePDF(){
   if(!duties.length) return;
   try{
     const doc=buildPDF(duties[sel]);
@@ -494,12 +505,10 @@ $("btnPdf").onclick=()=>{
     const url=URL.createObjectURL(lastBlob);
     $("prev").src=url; $("prev").classList.remove("hidden");
     $("btnShare").classList.remove("hidden");
-    say("PDF erzeugt.","ok");
-    if(!(navigator.canShare && navigator.canShare({files:[new File([lastBlob],lastName,{type:"application/pdf"})]}))){
-      const a=document.createElement("a"); a.href=url; a.download=lastName; a.click();
-    }
+    say("PDF für "+lastName.slice(9,19)+" bereit.","ok");
   }catch(e){ say("PDF fehlgeschlagen: "+e.message,"err"); }
-};
+}
+$("btnPdf").onclick=makePDF;
 
 $("btnShare").onclick=async()=>{
   if(!lastBlob) return;
@@ -528,7 +537,7 @@ $("file").onchange=e=>{
 };
 $("btnRaw").onclick=()=>ingest($("raw").value.trim(),"manuell");
 
-async function doFetch(u){
+async function doFetch(u,silent){
   say("Rufe Feed ab …");
   try{
     const r=await fetch(u,{cache:"no-store"});
@@ -542,9 +551,12 @@ async function doFetch(u){
       say(`Antwort erhalten (${ct}), aber kein Kalender darin.`+peek(body),"err");
       return;
     }
+    store("direct","ok");
     ingest(body,"Direktabruf");
   }catch(e){
-    say("Direktabruf vom Browser blockiert (CORS/Netzwerk: "+(e.message||e)+"). Weg über Kurzbefehl oder Datei nutzen.","err");
+    store("direct","blocked");
+    if(silent) say("Bereit &ndash; auf „Aus Zwischenablage einfügen“ tippen.","");
+    else say("Direktabruf vom Browser blockiert (CORS/Netzwerk: "+(e.message||e)+"). Nutze den Kurzbefehl &ndash; er umgeht diese Sperre.","err");
   }
 }
 $("btnFetch").onclick=()=>{
@@ -553,14 +565,27 @@ $("btnFetch").onclick=()=>{
   store("url",u); doFetch(u);
 };
 
-/* Start: gespeicherte URL vorbelegen, letzten Roster anzeigen */
+/* Start: Roster aus der Adresse (Kurzbefehl), sonst Cache / Direktabruf */
 (function(){
   const u=load("url"); if(u) $("url").value=u;
+
+  const m=(location.hash||"").match(/[#&]ics=([\s\S]+)$/);
+  if(m){
+    let raw="";
+    try{ raw=decodeURIComponent(m[1].replace(/\+/g," ")); }catch(e){ raw=m[1]; }
+    /* Adresse sofort bereinigen: Rosterdaten nicht im Verlauf stehen lassen */
+    try{ history.replaceState(null,"",location.pathname+location.search); }catch(e){}
+    if(ingest(raw,"Kurzbefehl")) return;
+    say("Kurzbefehl-Daten unvollständig &ndash; die Adresse wurde vermutlich gekürzt. Nimm „Aus Zwischenablage einfügen“.","err");
+    return;
+  }
+
   const cached=load("ics");
   const had = cached && ingest(cached,"zuletzt geladen");
   if(had) say("Zuletzt geladener Roster – aktualisiere …","");
-  if(u) doFetch(u);
-  else if(had) say("Zuletzt geladener Roster. Für aktuelle Daten neu laden.","");
+  if(u && load("direct")!=="blocked") doFetch(u,true);
+  else say(had ? "Zuletzt geladener Roster angezeigt. Für heute: „Aus Zwischenablage einfügen“."
+              : "Bereit &ndash; auf „Aus Zwischenablage einfügen“ tippen.","");
 })();
 </script>
 </body>
