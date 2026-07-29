@@ -146,6 +146,9 @@ const CUR_EXEMPT_CTY = new Set(["CA"]);
 const CUR_EXEMPT_APT = new Set(["BEG"]);
 const PREV_OK_CTY = new Set(["CA","GB","US"]);
 const PREV_OK_APT = new Set(["BEG","SIN"]);
+/* Schengen-Raum: nicht identisch mit EU/EFTA. Ohne Irland und Zypern,
+   mit Liechtenstein. Rumänien und Bulgarien seit 2025 vollwertig. */
+const SCHENGEN = new Set([...EU_EFTA].filter(c=>c!=="IE"&&c!=="CY").concat(["LI"]));
 
 const APT = {
 ZRH:"CH",GVA:"CH",BSL:"CH",BRN:"CH",LUG:"CH",SIR:"CH",
@@ -286,9 +289,14 @@ function buildPDF(legs){
     for(const ch of txt){ doc.text(ch,cx,y); cx+=doc.getTextWidth(ch)+sp; }
     return cx-x;
   };
-  const cbox=(x,yTop,txt,box)=>{
+  const cbox=(x,yTop,txt,box,checked)=>{
     doc.setLineWidth(0.247); doc.setDrawColor(...INK);
     doc.rect(x,yTop,box,box,"S");
+    if(checked){
+      const p=0.62; doc.setLineWidth(0.32);
+      doc.line(x+p,yTop+p,x+box-p,yTop+box-p);
+      doc.line(x+p,yTop+box-p,x+box-p,yTop+p);
+    }
     doc.setFont("courier","bold"); doc.setFontSize(7.2); doc.setTextColor(...INK);
     doc.text(txt,x+box+0.8,yTop+box-0.55);
     return x+box+0.8+doc.getTextWidth(txt);
@@ -299,12 +307,15 @@ function buildPDF(legs){
     const w=doc.getTextWidth(txt)+2.8, h=3.9, x=xr-w;
     if(kind==="REQ"){ doc.setFillColor(...RED); doc.setDrawColor(...RED); doc.setLineWidth(0.282);
       doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...WHITE); }
-    else if(kind==="NOTREQ"){ doc.setFillColor(...WHITE); doc.setDrawColor(...GREEN); doc.setLineWidth(0.282);
+    else if(kind==="NOTREQ"||kind==="SCH"){ doc.setFillColor(...WHITE); doc.setDrawColor(...GREEN); doc.setLineWidth(0.282);
       doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...GREEN); }
+    else if(kind==="NSCH"){ doc.setFillColor(...WHITE); doc.setDrawColor(...RED); doc.setLineWidth(0.282);
+      doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...RED); }
     else { doc.setFillColor(...WHITE); doc.setDrawColor(...RULE); doc.setLineWidth(0.212);
       doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...SOFT); }
     doc.setFont("courier","bold"); doc.setFontSize(6.6);
     doc.text(txt,x+1.4,yTop+h-1.15);
+    return w;
   };
   const rbox=(x,yTop,w,h,title)=>{
     doc.setLineWidth(0.317); doc.setDrawColor(...INK); doc.rect(x,yTop,w,h,"S");
@@ -390,8 +401,10 @@ function buildPDF(legs){
   doc.setLineWidth(0.212); doc.setDrawColor(...HAIR); doc.line(X0+tw,y+1.4,X1,y+1.4);
   y+=4.6;
 
-  const lh=11.4;
+  let li=0;
   for(const l of legs){
+    const outstation = !HUBS.includes(l.to) && !l.passive;
+    const lh = outstation ? 16.0 : 11.4;
     doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(X0,y,X1,y);
     doc.setFont("courier","bold"); doc.setFontSize(9.4);
     doc.setTextColor(...(l.passive?SOFT:INK));
@@ -400,17 +413,33 @@ function buildPDF(legs){
     doc.text(route,X0+17.5,y+4.5);
     const rw=doc.getTextWidth(route);
     lab(X0+17.5+rw+1.6,y+4.5,l.typ+(l.passive?"  "+l.code:""),6.4,SOFT,SP.xs);
-    badge(X1,y+1.5,{REQ:"ASS REQ",NOTREQ:"ASS NOT REQ",DH:"DEADHEAD"}[l.ass],l.ass);
+    const bw=badge(X1,y+1.5,{REQ:"ASS REQ",NOTREQ:"ASS NOT REQ",DH:"DEADHEAD"}[l.ass],l.ass);
+    if(li===0){                                   /* erster Flug des Tages */
+      const sch = SCHENGEN.has(APT[l.to]);
+      badge(X1-bw-2.0, y+1.5, sch?"SCH":"N-SCH", sch?"SCH":"NSCH");
+    }
+    li++;
 
+    /* Zeile A: immer – erwartete Flugzeit, Betankung mit PAX an Bord */
     const fy=y+9.6;
     let fx=X0;
     fx+=lab(fx,fy,"EXP. FLT TIME",5.8,SOFT,SP.s)+1.4;
-    wline(fx,fy+0.3,13); fx+=13+4;
-    if(!HUBS.includes(l.to) && !l.passive){
+    wline(fx,fy+0.3,13); fx+=13+6;
+    if(!l.passive){
+      const sc = HUBS.includes(l.from);   // ZRH/GVA: Special Conditions vorgekreuzt
+      fx+=lab(fx,fy,"FUELING W/ PAX",5.8,SOFT,SP.s)+1.4;
+      fx=cbox(fx,fy-2.1,"Y",2.9)+1.0;
+      fx=cbox(fx,fy-2.1,"N",2.9)+1.0;
+      fx=cbox(fx,fy-2.1,"SPEC. COND.",2.9,sc);
+    }
+    /* Zeile B: nur Legs zu einer Outstation */
+    if(outstation){
+      const fy2=y+14.2;
+      fx=X0;
       for(const [name,o] of [["APU",["Y","N"]],["NADP",["1","2"]],["MAINT",["Y","N"]],["REVERSE",["Y","N"]]]){
-        fx+=lab(fx,fy,name,5.8,SOFT,SP.s)+1.4;
-        fx=cbox(fx,fy-2.1,o[0],2.9)+1.0;
-        fx=cbox(fx,fy-2.1,o[1],2.9)+2.8;
+        fx+=lab(fx,fy2,name,5.8,SOFT,SP.s)+1.4;
+        fx=cbox(fx,fy2-2.1,o[0],2.9)+1.0;
+        fx=cbox(fx,fy2-2.1,o[1],2.9)+2.8;
       }
     }
     y+=lh;
