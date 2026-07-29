@@ -336,7 +336,7 @@ function buildPDF(legs){
   if(leadDH){
     busL1="CREWBUS ABFAHRT"; busL2="DEADHEAD";
     busVal=shift(leadDH.stdLT,DH_CREWBUS_OFFSET);
-    busNote=`LT ${leadDH.from}  ·  DH ${leadDH.fno} ${leadDH.from}-${leadDH.to} ${hm(leadDH.stdLT)}  -${DH_CREWBUS_OFFSET}'`;
+    busNote=`LT ${leadDH.from}  ·  DH ${leadDH.fno}  -${DH_CREWBUS_OFFSET}'`;
   } else if(CREWBUS_OFFSET[firstActive.from]){
     busL1="CREWBUS"; busL2="ABFAHRT";
     busVal=shift(firstActive.stdLT,CREWBUS_OFFSET[firstActive.from]);
@@ -377,18 +377,33 @@ function buildPDF(legs){
     doc.setFont("courier","bold"); doc.setFontSize(16); doc.setTextColor(...(val?INK:RULE));
     doc.text(val||"--:--", x+2, y+13.6);
     lab(x+2,y+17.0,note,5.6,SOFT,SP.xs);
+
+    if(i===1){                       /* Crewbus: handschriftliche Alternativzeit */
+      const sx=x+33;
+      doc.setDrawColor(...RULE); doc.setLineWidth(0.176);
+      doc.line(sx,y+2.0,sx,y+ch-2.0);
+      lab(sx+2.5,y+4.0,"EVTL. VEREINBARTE",5.5,SOFT,0.123);
+      lab(sx+2.5,y+6.8,"CREWBUS ZEIT",5.5,SOFT,0.123);
+      wline(sx+2.5,y+13.6,cwid-33-5);
+    }
   });
   y+=ch+2.6;
 
   /* Schnellfelder */
   const qh=11.5, gap=2.5;
-  const wq=[17,20,0,33]; wq[2]=CW-(17+20+33+gap*3);
-  const titles=["STAND","BRF ROOM","FIRST SLOT / ETD","BAGGAGE LABELN"];
+  /* Baggage-Kasten exakt auf seinen Inhalt zuschneiden, Rest an CREW BAGS */
+  doc.setFont("helvetica","normal"); doc.setFontSize(5.7);
+  const bagLbl=doc.getTextWidth("BAGGAGE LABELN")+SP.q*14;
+  doc.setFont("courier","bold"); doc.setFontSize(7.2);
+  const bagRow=3.1+0.8+doc.getTextWidth("YES")+3.0+3.1+0.8+doc.getTextWidth("NO");
+  const bagW=Math.max(bagLbl,bagRow)+3.2, crewW=16+(33-bagW);
+  const wq=[17,20,0,crewW,bagW]; wq[2]=CW-(17+20+crewW+bagW+gap*4);
+  const titles=["STAND","BRF ROOM","FIRST SLOT / ETD","CREW BAGS","BAGGAGE LABELN"];
   let x=X0;
   wq.forEach((w,i)=>{
     doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.rect(x,y,w,qh,"S");
     lab(x+1.6,y+3.4,titles[i],5.7,SOFT,SP.q);
-    if(i===3){
+    if(titles[i]==="BAGGAGE LABELN"){
       const xx=cbox(x+1.6,y+qh-3.2-3.1,"YES",3.1);
       cbox(xx+3.0,y+qh-3.2-3.1,"NO",3.1);
     } else wline(x+1.6,y+qh-3.2,w-3.2);
