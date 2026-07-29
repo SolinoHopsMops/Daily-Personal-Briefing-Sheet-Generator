@@ -139,6 +139,7 @@ const BRIEF_OFFSET = { ZRH:67, GVA:57 };
 const CREWBUS_OFFSET = { ZRH:50 };
 const DH_CREWBUS_OFFSET = 25;
 const PASSIVE_CODES = ["DH","PAX","TR"];
+const MIN_TURNAROUND = 40;          // Minuten STA -> nächste STD
 const DUTY_SPLIT_H = 6;
 
 const EU_EFTA = new Set(["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IS","IE","IT","LV","LT","LU","MT","NL","NO","PL","PT","RO","SK","SI","ES","SE","CH"]);
@@ -267,7 +268,8 @@ function assStatus(leg, prev){
    =========================================================================== */
 const X0=156.5, X1=288, CW=X1-X0, TOPY=9, BOTY=203;
 const INK=[20,23,26], SOFT=[92,101,112], RULE=[185,192,199], HAIR=[223,227,231],
-      RED=[200,16,46], GREEN=[18,112,58], BOXFILL=[241,244,246], WHITE=[255,255,255];
+      RED=[200,16,46], GREEN=[18,112,58], BOXFILL=[241,244,246], WHITE=[255,255,255],
+      TURN_BG=[255,233,168], TURN_EDGE=[221,180,74], TURN_INK=[107,74,0];
 const SP={xs:0.07, s:0.176, q:0.247, m:0.317, l:0.353, xl:0.564};
 const DOW=["SUN","MON","TUE","WED","THU","FRI","SAT"];
 const MON=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
@@ -420,6 +422,22 @@ function buildPDF(legs){
   for(const l of legs){
     const outstation = !HUBS.includes(l.to) && !l.passive;
     const lh = outstation ? 16.0 : 11.4;
+
+    /* Enger Turnaround: nur am selben Platz und zwischen zwei eigenen Flügen */
+    if(li>0){
+      const prev=legs[li-1];
+      const gap=(l.stdU-prev.staU)/60000;
+      if(prev.to===l.from && !prev.passive && !l.passive && gap>=0 && gap<=MIN_TURNAROUND){
+        const bh=4.8;
+        doc.setFillColor(...TURN_BG); doc.setDrawColor(...TURN_EDGE); doc.setLineWidth(0.176);
+        doc.rect(X0,y,CW,bh,"FD");
+        lab(X0+2.0,y+bh-1.5,"MINIMUM TURNAROUND",6.2,TURN_INK,0.317);
+        doc.setFont("helvetica","normal"); doc.setFontSize(6.0); doc.setTextColor(...TURN_INK);
+        const tx=`${Math.round(gap)} MIN GROUND  ·  ${l.from}`;
+        doc.text(tx, X1-2.0-doc.getTextWidth(tx), y+bh-1.5);
+        y+=bh;
+      }
+    }
     doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(X0,y,X1,y);
     doc.setFont("courier","bold"); doc.setFontSize(9.4);
     doc.setTextColor(...(l.passive?SOFT:INK));
