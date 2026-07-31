@@ -55,6 +55,10 @@
   code{font-family:var(--mono);font-size:12px;background:var(--bg);padding:2px 5px;border-radius:4px;
        word-break:break-all}
   .note{font-size:12px;color:var(--soft);margin-top:10px}
+  details.rev summary{font-size:14px;font-weight:700;color:var(--ink);padding:0}
+  details.rev[open] summary{margin-bottom:6px}
+  .rev-list{margin:4px 0 0;padding-left:20px;font-size:13px;color:var(--soft)}
+  .rev-list b{color:var(--ink)}
   .disclaimer{font-size:11.5px;color:var(--soft);border-top:1px solid var(--line);
               margin-top:26px;padding-top:14px}
   .hidden{display:none}
@@ -67,6 +71,21 @@
   <h1>Daily Briefing Sheet</h1>
   <p class="lead">Roster rein, druckfertiges A4-Blatt raus. Alles läuft im Browser &ndash;
      deine Rosterdaten verlassen dieses Gerät nicht.</p>
+
+  <details class="card rev">
+    <summary>Highlights of Revision</summary>
+    <ol class="rev-list">
+      <li><b>Turnaround-Zeit zwischen allen Flügen</b> – unter einer Stunde in Minuten,
+          darüber als hh:mm. Bei 40 Minuten oder weniger gelb hervorgehoben.</li>
+      <li><b>Fueling with PAX on board</b> pro Flug mit Y / N / Spec. Cond.;
+          in ZRH und GVA ist Spec. Cond. bereits angekreuzt.</li>
+      <li><b>Schengen-Kennzeichnung</b> beim ersten Flug des Tages: SCH grün, N-SCH rot.</li>
+      <li><b>Evtl. vereinbarte Crewbus Zeit</b> zum Eintragen, dazu ein Kasten
+          <b>Crew Bags</b> für die Anzahl Gepäckstücke.</li>
+      <li><b>Roster-Stand</b> in der Statuszeile – zeigt, wie frisch die geladenen Daten sind.</li>
+    </ol>
+    <p class="note">Es werden die fünf jüngsten Änderungen gezeigt.</p>
+  </details>
 
   <div class="card">
     <h2>Roster laden</h2>
@@ -274,6 +293,10 @@ const SP={xs:0.07, s:0.176, q:0.247, m:0.317, l:0.353, xl:0.564};
 const DOW=["SUN","MON","TUE","WED","THU","FRI","SAT"];
 const MON=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 const hm = s => s.slice(0,2)+":"+s.slice(2);
+/* Unter einer Stunde in Minuten, darüber als hh:mm */
+const dur = mins => { const m=Math.round(mins);
+  return m<60 ? `${m} MIN`
+              : `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`; };
 function shift(t,minus){
   const x=(((+t.slice(0,2))*60+(+t.slice(2))-minus)%1440+1440)%1440;
   return String(Math.floor(x/60)).padStart(2,"0")+":"+String(x%60).padStart(2,"0");
@@ -423,18 +446,25 @@ function buildPDF(legs){
     const outstation = !HUBS.includes(l.to) && !l.passive;
     const lh = outstation ? 16.0 : 11.4;
 
-    /* Enger Turnaround: nur am selben Platz und zwischen zwei eigenen Flügen */
+    /* Bodenzeit zwischen zwei Flügen am selben Platz */
     if(li>0){
       const prev=legs[li-1];
       const gap=(l.stdU-prev.staU)/60000;
-      if(prev.to===l.from && !prev.passive && !l.passive && gap>=0 && gap<=MIN_TURNAROUND){
-        const bh=4.8;
-        doc.setFillColor(...TURN_BG); doc.setDrawColor(...TURN_EDGE); doc.setLineWidth(0.176);
-        doc.rect(X0,y,CW,bh,"FD");
-        lab(X0+2.0,y+bh-1.5,"MINIMUM TURNAROUND",6.2,TURN_INK,0.317);
-        doc.setFont("helvetica","normal"); doc.setFontSize(6.0); doc.setTextColor(...TURN_INK);
-        const tx=`${Math.round(gap)} MIN GROUND  ·  ${l.from}`;
-        doc.text(tx, X1-2.0-doc.getTextWidth(tx), y+bh-1.5);
+      if(prev.to===l.from && gap>=0){
+        const own = !prev.passive && !l.passive;   /* echter A/C-Turnaround */
+        let bh, base, lw;
+        if(own && gap<=MIN_TURNAROUND){
+          bh=4.8; base=y+bh-1.5;
+          doc.setFillColor(...TURN_BG); doc.setDrawColor(...TURN_EDGE); doc.setLineWidth(0.176);
+          doc.rect(X0,y,CW,bh,"FD");
+          lw=lab(X0+2.0,base,"MINIMUM TURNAROUND",6.2,TURN_INK,0.317);
+          doc.setFont("helvetica","bold"); doc.setFontSize(6.2); doc.setTextColor(...TURN_INK);
+        } else {
+          bh=4.2; base=y+bh-1.35;
+          lw=lab(X0+2.0,base, own?"TURNAROUND":"GROUND", 5.8, SOFT, SP.q);
+          doc.setFont("helvetica","normal"); doc.setFontSize(5.8); doc.setTextColor(...SOFT);
+        }
+        doc.text(`${dur(gap)}  ·  ${l.from}`, X0+2.0+lw+2.5, base);
         y+=bh;
       }
     }
