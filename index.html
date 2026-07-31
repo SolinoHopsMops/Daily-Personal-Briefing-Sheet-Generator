@@ -55,6 +55,16 @@
   code{font-family:var(--mono);font-size:12px;background:var(--bg);padding:2px 5px;border-radius:4px;
        word-break:break-all}
   .note{font-size:12px;color:var(--soft);margin-top:10px}
+  .inbound{margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
+  .inbound h3{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--soft);
+              margin:0 0 10px;font-weight:600}
+  .ib-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .ib-row .leg{flex:1;font-family:var(--mono);font-size:12px;color:var(--ink)}
+  .ib-row .leg em{display:block;font-style:normal;font-size:10px;color:var(--soft);letter-spacing:.03em}
+  .ib-row input{width:74px;text-align:center;text-transform:uppercase;font-family:var(--mono);
+                font-size:15px;padding:9px 6px;border:1px solid var(--line);border-radius:9px;
+                background:#fff;color:var(--ink)}
+  .ib-row input.unknown{border-style:dashed;color:var(--soft)}
   details.rev summary{font-size:14px;font-weight:700;color:var(--ink);padding:0}
   details.rev[open] summary{margin-bottom:6px}
   .rev-list{margin:4px 0 0;padding-left:20px;font-size:13px;color:var(--soft)}
@@ -75,6 +85,9 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
+      <li><b>ASS wird nicht mehr geraten.</b> Bei Abflug ab ZRH/GVA fragt die Seite nach der
+          Vorstation des Flugzeugs. Antwort eintragen – dann rechnet die Logik. Feld leer lassen –
+          dann erscheint auf dem Blatt ein leeres Ankreuzfeld statt einer Behauptung.</li>
       <li><b>Turnaround-Zeit zwischen allen Flügen</b> – unter einer Stunde in Minuten,
           darüber als hh:mm. Bei 40 Minuten oder weniger gelb hervorgehoben.</li>
       <li><b>Fueling with PAX on board</b> pro Flug mit Y / N / Spec. Cond.;
@@ -82,7 +95,6 @@
       <li><b>Schengen-Kennzeichnung</b> beim ersten Flug des Tages: SCH grün, N-SCH rot.</li>
       <li><b>Evtl. vereinbarte Crewbus Zeit</b> zum Eintragen, dazu ein Kasten
           <b>Crew Bags</b> für die Anzahl Gepäckstücke.</li>
-      <li><b>Roster-Stand</b> in der Statuszeile – zeigt, wie frisch die geladenen Daten sind.</li>
     </ol>
     <p class="note">Es werden die fünf jüngsten Änderungen gezeigt.</p>
   </details>
@@ -113,6 +125,14 @@
   <div class="card hidden" id="dayCard">
     <h2>Flugtag</h2>
     <div class="days" id="days"></div>
+
+    <div id="inbound" class="inbound hidden">
+      <h3>Woher kommt das Flugzeug?</h3>
+      <div id="inboundRows"></div>
+      <p class="note">IATA-Code der Vorstation eintragen, dann wird ASS berechnet.
+         Feld leer lassen, wenn unbekannt – dann erscheint auf dem Blatt ein Feld zum Ankreuzen.</p>
+    </div>
+
     <button class="hidden" id="btnShare">PDF sichern / teilen</button>
     <button class="ghost hidden" id="btnOpen">PDF anzeigen</button>
   </div>
@@ -159,6 +179,7 @@ const CREWBUS_OFFSET = { ZRH:50 };
 const DH_CREWBUS_OFFSET = 25;
 const PASSIVE_CODES = ["DH","PAX","TR"];
 const MIN_TURNAROUND = 40;          // Minuten STA -> nächste STD
+const HUB_SAME_AC_H = 2;            // Bodenzeit am Hub, bis zu der dasselbe Muster plausibel ist
 const DUTY_SPLIT_H = 6;
 
 const EU_EFTA = new Set(["AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IS","IE","IT","LV","LT","LU","MT","NL","NO","PL","PT","RO","SK","SI","ES","SE","CH"]);
@@ -233,7 +254,7 @@ function parseICS(text){
       stdLT:m[3], staLT:m[5], typ:m[6], code,
       passive:PASSIVE_CODES.includes(code),
       stdU, staU,
-      stdLocal:toLocal(stdU,m[3]), staLocal:toLocal(staU,m[5])
+      stdLocal:toLocal(stdU,m[3]), staLocal:toLocal(staU,m[5]), guess:null
     });
   }
   legs.sort((a,b)=>a.stdU-b.stdU);
@@ -263,23 +284,40 @@ function groupDuties(legs){
 }
 
 /* ---- ASS gem. OM A Appendix -------------------------------------------- */
+/* Bewertung bei bekannter Vorstation des Flugzeugs */
+function assResolve(leg, prevApt){
+  const pc = APT[prevApt];
+  const ok = PREV_OK_APT.has(prevApt) || (pc && (EU_EFTA.has(pc)||PREV_OK_CTY.has(pc)));
+  if(!ok) return "REQ";
+  if(APT[leg.to]==="US") return "REQ";
+  return "NOTREQ";
+}
+/* REQ / NOTREQ / DH / OPEN – OPEN = Vorstation nicht aus dem Roster ableitbar */
 function assStatus(leg, prev){
   if(leg.passive) return "DH";
   const cty = APT[leg.from];
   const exempt = CUR_EXEMPT_APT.has(leg.from) || (cty && (EU_EFTA.has(cty)||CUR_EXEMPT_CTY.has(cty)));
   if(!exempt) return "REQ";
-  let prevApt=null;
-  if(prev && prev.to===leg.from){
-    const gapH=(leg.stdU-prev.staU)/3600000;
-    if(!HUBS.includes(leg.from) || gapH<2) prevApt=prev.from;
-  }
-  if(prevApt){
-    const pc=APT[prevApt];
-    const ok = PREV_OK_APT.has(prevApt) || (pc && (EU_EFTA.has(pc)||PREV_OK_CTY.has(pc)));
-    if(!ok) return "REQ";
-  }
   if(APT[leg.to]==="US") return "REQ";
-  return "NOTREQ";
+  /* Belegt ist die Kette nur, wenn du selbst mit dem Muster eingeflogen bist.
+     Nach einem Deadhead ist es ein anderer Flug und damit ein anderes Muster. */
+  if(prev && prev.to===leg.from && !prev.passive){
+    const gapH=(leg.stdU-prev.staU)/3600000;
+    if(!HUBS.includes(leg.from)) return assResolve(leg, prev.from);   /* Outstation: sicher */
+    if(gapH<HUB_SAME_AC_H) leg.guess = prev.from;                     /* Hub: plausibel */
+  }
+  return "OPEN";
+}
+/* Antworten auf die offenen Fragen anwenden */
+function resolveAll(legs, answers){
+  const out=legs.map(l=>l.ass); let n=0;
+  legs.forEach((l,i)=>{
+    if(l.ass==="OPEN"){
+      const a=(answers[n]||"").trim().toUpperCase(); n++;
+      if(a && a!=="?") out[i]=assResolve(l,a);
+    }
+  });
+  return out;
 }
 
 /* ===========================================================================
@@ -302,7 +340,8 @@ function shift(t,minus){
   return String(Math.floor(x/60)).padStart(2,"0")+":"+String(x%60).padStart(2,"0");
 }
 
-function buildPDF(legs){
+function buildPDF(legs, answers){
+  const eff = resolveAll(legs, answers||[]);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
 
@@ -476,7 +515,22 @@ function buildPDF(legs){
     doc.text(route,X0+17.5,y+4.5);
     const rw=doc.getTextWidth(route);
     lab(X0+17.5+rw+1.6,y+4.5,l.typ+(l.passive?"  "+l.code:""),6.4,SOFT,SP.xs);
-    const bw=badge(X1,y+1.5,{REQ:"ASS REQ",NOTREQ:"ASS NOT REQ",DH:"DEADHEAD"}[l.ass],l.ass);
+    let bw;
+    if(eff[li]==="OPEN"){
+      /* Vorstation unbekannt: nichts behaupten, Feld zum Ankreuzen */
+      const cb=2.9;
+      doc.setFont("helvetica","normal"); doc.setFontSize(5.8);
+      const lw=doc.getTextWidth("ASS")+SP.s*3;
+      doc.setFont("courier","bold"); doc.setFontSize(7.2);
+      const wReq=cb+0.8+doc.getTextWidth("REQ"), wNot=cb+0.8+doc.getTextWidth("NOT");
+      bw=lw+1.6+wReq+1.6+wNot;
+      const bx=X1-bw;
+      lab(bx,y+4.05,"ASS",5.8,SOFT,SP.s);
+      const x2=cbox(bx+lw+1.6,y+1.6,"REQ",cb);
+      cbox(x2+1.6,y+1.6,"NOT",cb);
+    } else {
+      bw=badge(X1,y+1.5,{REQ:"ASS REQ",NOTREQ:"ASS NOT REQ",DH:"DEADHEAD"}[eff[li]],eff[li]);
+    }
     if(li===0){                                   /* erster Flug des Tages */
       const sch = SCHENGEN.has(APT[l.to]);
       badge(X1-bw-2.0, y+1.5, sch?"SCH":"N-SCH", sch?"SCH":"NSCH");
@@ -578,6 +632,7 @@ function ingest(text,src){
   sel=duties.findIndex(d=>d[d.length-1].staLocal>=today);
   if(sel<0) sel=duties.length-1;
   renderDays();
+  renderInbound();
   $("dayCard").classList.remove("hidden");
   warnCut = t.indexOf("END:VCALENDAR")<0;
   say(`${duties.length} Flugtage · Roster-Stand ${stamp}`+(warnCut?" · ACHTUNG: Feed wirkt abgeschnitten.":""), warnCut?"err":"ok");
@@ -592,17 +647,41 @@ function renderDays(){
     b.className="day"+(i===sel?" sel":"");
     const route=d.map(l=>l.from).concat(d[d.length-1].to).join("-");
     b.innerHTML=`${d[0].stdLocal.toISOString().slice(0,10)}<small>${route}</small>`;
-    b.onclick=()=>{ sel=i; renderDays(); makePDF(); };
+    b.onclick=()=>{ sel=i; renderDays(); renderInbound(); makePDF(); };
     box.appendChild(b);
   });
   box.children[sel] && box.children[sel].scrollIntoView({block:"nearest",inline:"center"});
 }
 
 
+function openLegs(){ return duties.length ? duties[sel].filter(l=>l.ass==="OPEN") : []; }
+
+function renderInbound(){
+  const box=$("inboundRows"); box.innerHTML="";
+  const open=openLegs();
+  if(!open.length){ $("inbound").classList.add("hidden"); return; }
+  $("inbound").classList.remove("hidden");
+  open.forEach((l,n)=>{
+    const row=document.createElement("div"); row.className="ib-row";
+    const info=document.createElement("div"); info.className="leg";
+    info.innerHTML=`${l.fno} &nbsp; ${l.from} ${hm(l.stdLT)}<em>${l.guess?("Vorschlag aus deiner Kette: "+l.guess):"nicht ableitbar"}</em>`;
+    const inp=document.createElement("input");
+    inp.type="text"; inp.maxLength=3; inp.placeholder="???"; inp.value=l.guess||"";
+    inp.dataset.n=n;
+    if(!inp.value) inp.classList.add("unknown");
+    inp.oninput=()=>{ inp.value=inp.value.toUpperCase().replace(/[^A-Z]/g,"");
+                      inp.classList.toggle("unknown", !inp.value); makePDF(); };
+    row.appendChild(info); row.appendChild(inp); box.appendChild(row);
+  });
+}
+function answers(){
+  return [...$("inboundRows").querySelectorAll("input")].map(i=>i.value.trim().toUpperCase());
+}
+
 function makePDF(){
   if(!duties.length) return;
   try{
-    const doc=buildPDF(duties[sel]);
+    const doc=buildPDF(duties[sel], answers());
     lastName="Briefing_"+duties[sel][0].stdLocal.toISOString().slice(0,10)+".pdf";
     lastBlob=doc.output("blob");
     if(lastUrl) try{ URL.revokeObjectURL(lastUrl); }catch(e){}
