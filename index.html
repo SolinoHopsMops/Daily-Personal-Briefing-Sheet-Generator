@@ -56,8 +56,9 @@
        word-break:break-all}
   .note{font-size:12px;color:var(--soft);margin-top:10px}
   .inbound{margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
-  .inbound h3{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--soft);
-              margin:0 0 10px;font-weight:600}
+  .inbound h3{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);
+              margin:0 0 10px;font-weight:600;line-height:1.5}
+  .inbound h3 .rel{color:var(--warn);white-space:nowrap}
   .ib-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
   .ib-row .leg{flex:1;font-family:var(--mono);font-size:12px;color:var(--ink)}
   .ib-row .leg em{display:block;font-style:normal;font-size:10px;color:var(--soft);letter-spacing:.03em}
@@ -85,6 +86,9 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
+      <li><b>Flughafen-Tabelle deckt das komplette LX-Streckennetz ab</b> (111 Stationen,
+          gegen die offizielle Streckenliste geprüft). Ist ein Code nicht hinterlegt, entfällt
+          das Schengen-Feld – statt einer falschen Aussage.</li>
       <li><b>ASS wird nicht mehr geraten.</b> Bei Abflug ab ZRH/GVA fragt die Seite nach der
           Vorstation des Flugzeugs. Antwort eintragen – dann rechnet die Logik. Feld leer lassen –
           dann erscheint auf dem Blatt ein leeres Ankreuzfeld statt einer Behauptung.</li>
@@ -93,8 +97,6 @@
       <li><b>Fueling with PAX on board</b> pro Flug mit Y / N / Spec. Cond.;
           in ZRH und GVA ist Spec. Cond. bereits angekreuzt.</li>
       <li><b>Schengen-Kennzeichnung</b> beim ersten Flug des Tages: SCH grün, N-SCH rot.</li>
-      <li><b>Evtl. vereinbarte Crewbus Zeit</b> zum Eintragen, dazu ein Kasten
-          <b>Crew Bags</b> für die Anzahl Gepäckstücke.</li>
     </ol>
     <p class="note">Es werden die fünf jüngsten Änderungen gezeigt.</p>
   </details>
@@ -127,7 +129,8 @@
     <div class="days" id="days"></div>
 
     <div id="inbound" class="inbound hidden">
-      <h3>Woher kommt das Flugzeug?</h3>
+      <h3>Woher kommt das Flugzeug? Bitte in IATA Code eingeben
+          <span class="rel">relevant für ASS</span></h3>
       <div id="inboundRows"></div>
       <p class="note">IATA-Code der Vorstation eintragen, dann wird ASS berechnet.
          Feld leer lassen, wenn unbekannt – dann erscheint auf dem Blatt ein Feld zum Ankreuzen.</p>
@@ -194,7 +197,7 @@ const SCHENGEN = new Set([...EU_EFTA].filter(c=>c!=="IE"&&c!=="CY").concat(["LI"
 const APT = {
 ZRH:"CH",GVA:"CH",BSL:"CH",BRN:"CH",LUG:"CH",SIR:"CH",
 FRA:"DE",MUC:"DE",BER:"DE",HAM:"DE",DUS:"DE",STR:"DE",NUE:"DE",DRS:"DE",LEJ:"DE",
-HAJ:"DE",CGN:"DE",BRE:"DE",FMO:"DE",FDH:"DE",SCN:"DE",FKB:"DE",
+HAJ:"DE",CGN:"DE",BRE:"DE",FMO:"DE",FDH:"DE",SCN:"DE",FKB:"DE",HDF:"DE",GWT:"DE",
 CDG:"FR",ORY:"FR",NCE:"FR",LYS:"FR",MRS:"FR",BOD:"FR",TLS:"FR",NTE:"FR",AJA:"FR",
 FSC:"FR",BIA:"FR",CLY:"FR",MPL:"FR",SXB:"FR",BIQ:"FR",LIL:"FR",
 FCO:"IT",MXP:"IT",LIN:"IT",BGY:"IT",VCE:"IT",TSF:"IT",NAP:"IT",FLR:"IT",BLQ:"IT",
@@ -206,7 +209,7 @@ LIS:"PT",OPO:"PT",FAO:"PT",FNC:"PT",PDL:"PT",TER:"PT",
 ATH:"GR",SKG:"GR",HER:"GR",RHO:"GR",JMK:"GR",JTR:"GR",CFU:"GR",ZTH:"GR",KGS:"GR",
 CHQ:"GR",PVK:"GR",EFL:"GR",SMI:"GR",JSI:"GR",KLX:"GR",AOK:"GR",
 VIE:"AT",GRZ:"AT",SZG:"AT",INN:"AT",KLU:"AT",LNZ:"AT",
-AMS:"NL",EIN:"NL",RTM:"NL",MST:"NL",BRU:"BE",CRL:"BE",LUX:"LU",
+AMS:"NL",EIN:"NL",RTM:"NL",MST:"NL",BRU:"BE",CRL:"BE",OST:"BE",ANR:"BE",LUX:"LU",
 DUB:"IE",ORK:"IE",SNN:"IE",CPH:"DK",BLL:"DK",AAL:"DK",AAR:"DK",
 ARN:"SE",BMA:"SE",GOT:"SE",MMX:"SE",OSL:"NO",BGO:"NO",SVG:"NO",TRD:"NO",TOS:"NO",
 HEL:"FI",KEF:"IS",
@@ -228,7 +231,7 @@ KBP:"UA",IEV:"UA",KIV:"MD",TBS:"GE",EVN:"AM",GYD:"AZ",
 DXB:"AE",AUH:"AE",DOH:"QA",RUH:"SA",JED:"SA",KWI:"KW",BAH:"BH",MCT:"OM",
 JFK:"US",EWR:"US",BOS:"US",ORD:"US",LAX:"US",SFO:"US",MIA:"US",IAD:"US",PHL:"US",SEA:"US",
 YUL:"CA",YYZ:"CA",YVR:"CA",YYC:"CA",
-SIN:"SG",HKG:"HK",NRT:"JP",HND:"JP",PVG:"CN",PEK:"CN",BOM:"IN",DEL:"IN",BKK:"TH",
+SIN:"SG",HKG:"HK",NRT:"JP",HND:"JP",PVG:"CN",PEK:"CN",BOM:"IN",DEL:"IN",BLR:"IN",ICN:"KR",BKK:"TH",
 JNB:"ZA",NBO:"KE",GRU:"BR",EZE:"AR"
 };
 
@@ -532,8 +535,11 @@ function buildPDF(legs, answers){
       bw=badge(X1,y+1.5,{REQ:"ASS REQ",NOTREQ:"ASS NOT REQ",DH:"DEADHEAD"}[eff[li]],eff[li]);
     }
     if(li===0){                                   /* erster Flug des Tages */
-      const sch = SCHENGEN.has(APT[l.to]);
-      badge(X1-bw-2.0, y+1.5, sch?"SCH":"N-SCH", sch?"SCH":"NSCH");
+      const cty = APT[l.to];
+      if(cty!==undefined){                        /* unbekannter Code: Feld weglassen */
+        const sch = SCHENGEN.has(cty);
+        badge(X1-bw-2.0, y+1.5, sch?"SCH":"N-SCH", sch?"SCH":"NSCH");
+      }
     }
     li++;
 
