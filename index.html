@@ -86,6 +86,8 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
+      <li><b>Peak Times in ZRH</b> werden orange markiert – Start oder Landung in einem der
+          Fenster 07:00–08:00, 09:30–10:30, 12:00–14:00, 16:30–18:00, 19:30–21:00 LT.</li>
       <li><b>CUT-FREQ</b> zum Eintragen der VHF-Frequenz, bei jedem Flug mit Ziel ausserhalb
           von ZRH/GVA.</li>
       <li><b>Fueling with PAX on board</b> erscheint bei Flügen mit Ziel ZRH/GVA,
@@ -93,9 +95,6 @@
       <li><b>Flughafen-Tabelle deckt das komplette LX-Streckennetz ab</b> (111 Stationen,
           gegen die offizielle Streckenliste geprüft). Ist ein Code nicht hinterlegt, entfällt
           das Schengen-Feld – statt einer falschen Aussage.</li>
-      <li><b>ASS wird nicht mehr geraten.</b> Bei Abflug ab ZRH/GVA fragt die Seite nach der
-          Vorstation des Flugzeugs. Antwort eintragen – dann rechnet die Logik. Feld leer lassen –
-          dann erscheint auf dem Blatt ein leeres Ankreuzfeld statt einer Behauptung.</li>
       <li><b>NADP richtet sich nach dem Abflugort</b> – bei Start ab ZRH/GVA entfällt das Feld,
           bei allen anderen Abflugorten steht es da. Neu ausserdem <b>FDDC</b> (Y/N) bei jedem
           Flug, der ausserhalb von ZRH/GVA landet.</li>
@@ -184,6 +183,10 @@ const CREWBUS_OFFSET = { ZRH:50 };
 const DH_CREWBUS_OFFSET = 25;
 const PASSIVE_CODES = ["DH","PAX","TR"];
 const MIN_TURNAROUND = 40;          // Minuten STA -> nächste STD
+/* ZRH Peak Times (LT), Start und Ende einschliesslich */
+const ZRH_PEAKS = [["0700","0800"],["0930","1030"],["1200","1400"],
+                   ["1630","1800"],["1930","2100"]];
+const PEAK_APT = "ZRH";
 const HUB_SAME_AC_H = 2;            // Bodenzeit am Hub, bis zu der dasselbe Muster plausibel ist
 const DUTY_SPLIT_H = 6;
 
@@ -331,12 +334,21 @@ function resolveAll(legs, answers){
 const X0=156.5, X1=288, CW=X1-X0, TOPY=9, BOTY=203;
 const INK=[20,23,26], SOFT=[92,101,112], RULE=[185,192,199], HAIR=[223,227,231],
       RED=[200,16,46], GREEN=[18,112,58], BOXFILL=[241,244,246], WHITE=[255,255,255],
-      TURN_BG=[255,233,168], TURN_EDGE=[221,180,74], TURN_INK=[107,74,0];
+      TURN_BG=[255,233,168], TURN_EDGE=[221,180,74], TURN_INK=[107,74,0],
+      PEAK_BG=[232,130,12];
 const SP={xs:0.07, s:0.176, q:0.247, m:0.317, l:0.353, xl:0.564};
 const DOW=["SUN","MON","TUE","WED","THU","FRI","SAT"];
 const MON=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 const hm = s => s.slice(0,2)+":"+s.slice(2);
 /* Unter einer Stunde in Minuten, darüber als hh:mm */
+const _mins = s => (+s.slice(0,2))*60 + (+s.slice(2));
+/* 'DEP', 'ARR', 'DEP+ARR' oder null – Peak Time in ZRH */
+function peakState(l){
+  const dep = l.from===PEAK_APT && ZRH_PEAKS.some(([a,b])=>_mins(a)<=_mins(l.stdLT)&&_mins(l.stdLT)<=_mins(b));
+  const arr = l.to  ===PEAK_APT && ZRH_PEAKS.some(([a,b])=>_mins(a)<=_mins(l.staLT)&&_mins(l.staLT)<=_mins(b));
+  if(dep&&arr) return "DEP+ARR";
+  return dep ? "DEP" : (arr ? "ARR" : null);
+}
 const dur = mins => { const m=Math.round(mins);
   return m<60 ? `${m} MIN`
               : `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`; };
@@ -357,6 +369,10 @@ function buildPDF(legs, answers){
     let cx=x;
     for(const ch of txt){ doc.text(ch,cx,y); cx+=doc.getTextWidth(ch)+sp; }
     return cx-x;
+  };
+  const labW=(txt,size,sp)=>{
+    doc.setFont("helvetica","normal"); doc.setFontSize(size);
+    return doc.getTextWidth(txt)+sp*txt.length;
   };
   const cbox=(x,yTop,txt,box,checked)=>{
     doc.setLineWidth(0.247); doc.setDrawColor(...INK);
@@ -521,8 +537,9 @@ function buildPDF(legs, answers){
     const route=`${l.from} ${hm(l.stdLT)} > ${l.to} ${hm(l.staLT)}`;
     doc.text(route,X0+17.5,y+4.5);
     const rw=doc.getTextWidth(route);
-    lab(X0+17.5+rw+1.6,y+4.5,l.typ+(l.passive?"  "+l.code:""),6.4,SOFT,SP.xs);
-    let bw;
+    const typTxt=l.typ+(l.passive?"  "+l.code:"");
+    lab(X0+17.5+rw+1.6,y+4.5,typTxt,6.4,SOFT,SP.xs);
+    let bw, used=0;
     if(eff[li]==="OPEN"){
       /* Vorstation unbekannt: nichts behaupten, Feld zum Ankreuzen */
       const cb=2.9;
@@ -538,11 +555,29 @@ function buildPDF(legs, answers){
     } else {
       bw=badge(X1,y+1.5,{REQ:"ASS REQ",NOTREQ:"ASS NOT REQ",DH:"DEADHEAD"}[eff[li]],eff[li]);
     }
+    used=bw+2.0;
     if(li===0){                                   /* erster Flug des Tages */
       const cty = APT[l.to];
       if(cty!==undefined){                        /* unbekannter Code: Feld weglassen */
         const sch = SCHENGEN.has(cty);
-        badge(X1-bw-2.0, y+1.5, sch?"SCH":"N-SCH", sch?"SCH":"NSCH");
+        used += badge(X1-bw-2.0, y+1.5, sch?"SCH":"N-SCH", sch?"SCH":"NSCH")+2.0;
+      }
+    }
+    /* Peak Time in ZRH: orange Markierung, Text so lang wie der Platz zulässt */
+    const pk=peakState(l);
+    if(pk){
+      const px=X0+17.5+rw+1.6+labW(typTxt,6.4,SP.xs)+2.5;
+      const free=X1-used-px;
+      for(const txt of [`PEAK ${pk} · EXPECT DELAY`,`PEAK ${pk} · DELAY`,`PEAK ${pk}`]){
+        doc.setFont("courier","bold"); doc.setFontSize(6.6);
+        const w=doc.getTextWidth(txt)+2.8;
+        if(w<=free){
+          doc.setFillColor(...PEAK_BG); doc.setDrawColor(...PEAK_BG); doc.setLineWidth(0.282);
+          doc.rect(px,y+1.5,w,3.9,"FD");
+          doc.setFont("courier","bold"); doc.setFontSize(6.6); doc.setTextColor(...WHITE);
+          doc.text(txt,px+1.4,y+1.5+3.9-1.15);
+          break;
+        }
       }
     }
     li++;
