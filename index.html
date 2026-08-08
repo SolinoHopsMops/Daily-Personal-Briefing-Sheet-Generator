@@ -86,10 +86,10 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
+      <li><b>Vergangene Flugtage werden nicht mehr angeboten.</b> Die Seite startet immer
+          beim nächsten Einsatz; ein laufender Flugtag bleibt bis zur letzten Landung stehen.</li>
       <li><b>Peak Times in ZRH</b> werden orange markiert – Start oder Landung in einem der
           Fenster 07:00–08:00, 09:30–10:30, 12:00–14:00, 16:30–18:00, 19:30–21:00 LT.</li>
-      <li><b>CUT-FREQ</b> zum Eintragen der VHF-Frequenz, bei jedem Flug mit Ziel ausserhalb
-          von ZRH/GVA.</li>
       <li><b>Fueling with PAX on board</b> erscheint bei Flügen mit Ziel ZRH/GVA,
           immer unausgefüllt.</li>
       <li><b>Flughafen-Tabelle deckt das komplette LX-Streckennetz ab</b> (111 Stationen,
@@ -331,7 +331,9 @@ function resolveAll(legs, answers){
 /* ===========================================================================
    3  PDF  (A4 quer, Inhalt ausschliesslich auf der rechten Blatthälfte)
    =========================================================================== */
-const X0=156.5, X1=288, CW=X1-X0, TOPY=9, BOTY=203;
+/* Rechte Blatthälfte beginnt bei 148.5 mm. 4 mm Abstand zur Falz,
+   5 mm zu den übrigen Kanten (unter dem nicht bedruckbaren Rand der meisten Drucker). */
+const X0=152.5, X1=292, CW=X1-X0, TOPY=5, BOTY=205;
 const INK=[20,23,26], SOFT=[92,101,112], RULE=[185,192,199], HAIR=[223,227,231],
       RED=[200,16,46], GREEN=[18,112,58], BOXFILL=[241,244,246], WHITE=[255,255,255],
       TURN_BG=[255,233,168], TURN_EDGE=[221,180,74], TURN_INK=[107,74,0],
@@ -639,11 +641,13 @@ function buildPDF(legs, answers){
    4  UI
    =========================================================================== */
 const $ = id => document.getElementById(id);
-let duties=[], sel=0, lastBlob=null, lastUrl="", lastName="", warnCut=false, stamp="";
+let duties=[], sel=0, lastBlob=null, lastUrl="", lastName="", warnCut=false, warnPast=false, stamp="";
 
 const say=(msg,cls="")=>{ const s=$("status"); s.textContent=msg; s.className=cls; };
 const store=(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} };
 const load =k=>{ try{ return localStorage.getItem(k); }catch(e){ return null; } };
+
+const dayKey = d => d.toISOString().slice(0,10);
 
 function peek(t){
   const p=(t||"").trim().replace(/\s+/g," ").slice(0,60);
@@ -678,15 +682,24 @@ function ingest(text,src){
   }
   const legs=parseICS(text);
   if(!legs.length){ say("Feed gelesen, aber keine Flüge darin gefunden.","err"); return false; }
+  const allDuties=groupDuties(legs);
   store("ics",text);
   if(src.indexOf("zuletzt")<0) store("ics_at", new Date().toISOString());
   const at=load("ics_at");
   stamp = at ? new Date(at).toLocaleString("de-CH",
             {day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "unbekannt";
-  duties=groupDuties(legs);
-  const today=new Date(); today.setHours(0,0,0,0);
-  sel=duties.findIndex(d=>d[d.length-1].staLocal>=today);
-  if(sel<0) sel=duties.length-1;
+  /* Vergangene Flugtage gar nicht erst anbieten */
+  const now=new Date();
+  const todayStr=[now.getFullYear(),
+                  String(now.getMonth()+1).padStart(2,"0"),
+                  String(now.getDate()).padStart(2,"0")].join("-");
+  const upcoming=allDuties.filter(d=>dayKey(d[d.length-1].staLocal)>=todayStr);
+  const onlyPast = upcoming.length===0;
+  duties = onlyPast ? allDuties : upcoming;
+
+  /* Default: der nächste Einsatz, der noch nicht vorbei ist */
+  sel=duties.findIndex(d=>d[d.length-1].staU>=now);
+  if(sel<0) sel=0;
   renderDays();
   renderInbound();
   $("dayCard").classList.remove("hidden");
@@ -702,7 +715,7 @@ function renderDays(){
     const b=document.createElement("button");
     b.className="day"+(i===sel?" sel":"");
     const route=d.map(l=>l.from).concat(d[d.length-1].to).join("-");
-    b.innerHTML=`${d[0].stdLocal.toISOString().slice(0,10)}<small>${route}</small>`;
+    b.innerHTML=`${dayKey(d[0].stdLocal)}<small>${route}</small>`;
     b.onclick=()=>{ sel=i; renderDays(); renderInbound(); makePDF(); };
     box.appendChild(b);
   });
@@ -738,15 +751,16 @@ function makePDF(){
   if(!duties.length) return;
   try{
     const doc=buildPDF(duties[sel], answers());
-    lastName="Briefing_"+duties[sel][0].stdLocal.toISOString().slice(0,10)+".pdf";
+    lastName="Briefing_"+dayKey(duties[sel][0].stdLocal)+".pdf";
     lastBlob=doc.output("blob");
     if(lastUrl) try{ URL.revokeObjectURL(lastUrl); }catch(e){}
     lastUrl=URL.createObjectURL(lastBlob);
     $("btnShare").classList.remove("hidden");
     $("btnOpen").classList.remove("hidden");
     say("PDF für "+lastName.slice(9,19)+" bereit · Roster-Stand "+stamp
-        +(warnCut?" · ACHTUNG: Roster kam unvollständig an, spätere Flugtage können fehlen.":""),
-        warnCut?"err":"ok");
+        +(warnCut?" · ACHTUNG: Roster kam unvollständig an, spätere Flugtage können fehlen.":"")
+        +(warnPast?" · ACHTUNG: Der Roster enthält nur vergangene Flugtage.":""),
+        (warnCut||warnPast)?"err":"ok");
   }catch(e){ say("PDF fehlgeschlagen: "+e.message,"err"); }
 }
 $("btnOpen").onclick=()=>{ if(lastUrl) window.open(lastUrl,"_blank"); };
