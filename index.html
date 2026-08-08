@@ -621,10 +621,11 @@ function buildPDF(legs, answers){
 
   /* Schreibfelder */
   const avail=BOTY-4.2-y-2.6;
-  const hRem=avail*0.44, hCab=avail*0.56;
-  rbox(X0,y,CW,hRem,"REMARKS");
-  y+=hRem+2.6;
+  const hCab=avail*0.25;          /* Cabin Briefing oben, ein Viertel */
+  const hRem=avail*0.75;          /* Remarks darunter, drei Viertel   */
   rbox(X0,y,CW,hCab,"CABIN BRIEFING  (WX, TECHNISCHES, PADs, ROLLZEIT, ...)");
+  y+=hCab+2.6;
+  rbox(X0,y,CW,hRem,"REMARKS");
 
   /* Fuss */
   lab(X0,BOTY,"ASS gem. OM A Appendix / OM A 10.3.1  ·  Abflug ZRH/GVA: Vorflug des A/C aus dem LX-Netz angenommen",5.2,SOFT,SP.xs);
