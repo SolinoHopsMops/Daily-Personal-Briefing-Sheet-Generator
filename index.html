@@ -86,12 +86,13 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
+      <li><b>A-CDM-Status des Abflugorts</b> in der Feldzeile: <b>A-CDM</b> bei den 34 von
+          EUROCONTROL genannten Flughäfen, sonst <b>NO A-CDM</b>. ZRH/GVA ausgenommen.
+          Advanced ATC TWR ist darin nicht abgebildet.</li>
       <li><b>Vergangene Flugtage werden nicht mehr angeboten.</b> Die Seite startet immer
           beim nächsten Einsatz; ein laufender Flugtag bleibt bis zur letzten Landung stehen.</li>
       <li><b>Peak Times in ZRH</b> werden orange markiert – Start oder Landung in einem der
           Fenster 07:00–08:00, 09:30–10:30, 12:00–14:00, 16:30–18:00, 19:30–21:00 LT.</li>
-      <li><b>Fueling with PAX on board</b> erscheint bei Flügen mit Ziel ZRH/GVA,
-          immer unausgefüllt.</li>
       <li><b>Flughafen-Tabelle deckt das komplette LX-Streckennetz ab</b> (111 Stationen,
           gegen die offizielle Streckenliste geprüft). Ist ein Code nicht hinterlegt, entfällt
           das Schengen-Feld – statt einer falschen Aussage.</li>
@@ -187,6 +188,13 @@ const MIN_TURNAROUND = 40;          // Minuten STA -> nächste STD
 const ZRH_PEAKS = [["0700","0800"],["0930","1030"],["1200","1400"],
                    ["1630","1800"],["1930","2100"]];
 const PEAK_APT = "ZRH";
+/* Voll implementiertes A-CDM, 34 Flughäfen laut EUROCONTROL
+   (eurocontrol.int/concept/airport-collaborative-decision-making, abgerufen 08.08.2026).
+   Das abgestufte "Advanced ATC TWR" ist dort nicht namentlich aufgeführt und
+   daher hier nicht abgebildet – "NO A-CDM" heisst also: kein volles A-CDM. */
+const CDM_AIRPORTS = new Set(["ALC","AMS","BCN","BGY","BER","BRU","CPH","DUS","FRA","GVA",
+  "HAM","HEL","LIS","LHR","LGW","LYS","MAD","AGP","LIN","MXP","MUC","NAP","NCE","OSL","PMI",
+  "CDG","ORY","PRG","RIX","FCO","STR","VCE","VIE","ZRH"]);
 const HUB_SAME_AC_H = 2;            // Bodenzeit am Hub, bis zu der dasselbe Muster plausibel ist
 const DUTY_SPLIT_H = 6;
 
@@ -337,7 +345,7 @@ const X0=152.5, X1=292, CW=X1-X0, TOPY=5, BOTY=205;
 const INK=[20,23,26], SOFT=[92,101,112], RULE=[185,192,199], HAIR=[223,227,231],
       RED=[200,16,46], GREEN=[18,112,58], BOXFILL=[241,244,246], WHITE=[255,255,255],
       TURN_BG=[255,233,168], TURN_EDGE=[221,180,74], TURN_INK=[107,74,0],
-      PEAK_BG=[232,130,12];
+      PEAK_BG=[232,130,12], CDM_INK=[31,78,121];
 const SP={xs:0.07, s:0.176, q:0.247, m:0.317, l:0.353, xl:0.564};
 const DOW=["SUN","MON","TUE","WED","THU","FRI","SAT"];
 const MON=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
@@ -396,6 +404,10 @@ function buildPDF(legs, answers){
       doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...WHITE); }
     else if(kind==="NOTREQ"||kind==="SCH"){ doc.setFillColor(...WHITE); doc.setDrawColor(...GREEN); doc.setLineWidth(0.282);
       doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...GREEN); }
+    else if(kind==="CDM"){ doc.setFillColor(...CDM_INK); doc.setDrawColor(...CDM_INK); doc.setLineWidth(0.282);
+      doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...WHITE); }
+    else if(kind==="NOCDM"){ doc.setFillColor(...WHITE); doc.setDrawColor(...RULE); doc.setLineWidth(0.212);
+      doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...SOFT); }
     else if(kind==="NSCH"){ doc.setFillColor(...WHITE); doc.setDrawColor(...RED); doc.setLineWidth(0.282);
       doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...RED); }
     else { doc.setFillColor(...WHITE); doc.setDrawColor(...RULE); doc.setLineWidth(0.212);
@@ -614,6 +626,14 @@ function buildPDF(legs, answers){
         fx+=lab(fx,fy2,name,5.8,SOFT,SP.s)+1.4;
         fx=cbox(fx,fy2-2.1,o[0],2.9)+1.0;
         fx=cbox(fx,fy2-2.1,o[1],2.9)+2.8;
+      }
+      /* A-CDM-Status des Abflugorts (ZRH/GVA ausgenommen) */
+      if(needNadp){
+        const cdm=CDM_AIRPORTS.has(l.from);
+        const ctxt=cdm?"A-CDM":"NO A-CDM";
+        doc.setFont("courier","bold"); doc.setFontSize(6.6);
+        const cw_=doc.getTextWidth(ctxt)+2.8;
+        badge(fx+1.2+cw_, fy2-3.9+1.15, ctxt, cdm?"CDM":"NOCDM");
       }
     }
     y+=lh;
