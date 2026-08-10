@@ -86,6 +86,8 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
+      <li><b>Turnaround-Warnung zweistufig:</b> unter 50 Minuten orange (<b>TIGHT
+          TURNAROUND</b>), unter 45 Minuten rot (<b>MINIMUM TURNAROUND</b>).</li>
       <li><b>A-CDM-Status des Abflugorts</b> in der Feldzeile: <b>A-CDM</b> bei den 34 von
           EUROCONTROL genannten Flughäfen, sonst <b>NO A-CDM</b>. ZRH/GVA ausgenommen.
           Advanced ATC TWR ist darin nicht abgebildet.</li>
@@ -93,9 +95,6 @@
           beim nächsten Einsatz; ein laufender Flugtag bleibt bis zur letzten Landung stehen.</li>
       <li><b>Peak Times in ZRH</b> werden orange markiert – Start oder Landung in einem der
           Fenster 07:00–08:00, 09:30–10:30, 12:00–14:00, 16:30–18:00, 19:30–21:00 LT.</li>
-      <li><b>Flughafen-Tabelle deckt das komplette LX-Streckennetz ab</b> (111 Stationen,
-          gegen die offizielle Streckenliste geprüft). Ist ein Code nicht hinterlegt, entfällt
-          das Schengen-Feld – statt einer falschen Aussage.</li>
       <li><b>NADP richtet sich nach dem Abflugort</b> – bei Start ab ZRH/GVA entfällt das Feld,
           bei allen anderen Abflugorten steht es da. Neu ausserdem <b>FDDC</b> (Y/N) bei jedem
           Flug, der ausserhalb von ZRH/GVA landet.</li>
@@ -183,7 +182,8 @@ const BRIEF_OFFSET = { ZRH:67, GVA:57 };
 const CREWBUS_OFFSET = { ZRH:50 };
 const DH_CREWBUS_OFFSET = 25;
 const PASSIVE_CODES = ["DH","PAX","TR"];
-const MIN_TURNAROUND = 40;          // Minuten STA -> nächste STD
+const TURN_RED = 45;                // Bodenzeit unter 45 min -> rot
+const TURN_ORANGE = 50;             // Bodenzeit unter 50 min -> orange
 /* ZRH Peak Times (LT), Start und Ende einschliesslich */
 const ZRH_PEAKS = [["0700","0800"],["0930","1030"],["1200","1400"],
                    ["1630","1800"],["1930","2100"]];
@@ -344,7 +344,8 @@ function resolveAll(legs, answers){
 const X0=152.5, X1=292, CW=X1-X0, TOPY=5, BOTY=205;
 const INK=[20,23,26], SOFT=[92,101,112], RULE=[185,192,199], HAIR=[223,227,231],
       RED=[200,16,46], GREEN=[18,112,58], BOXFILL=[241,244,246], WHITE=[255,255,255],
-      TURN_BG=[255,233,168], TURN_EDGE=[221,180,74], TURN_INK=[107,74,0],
+      ORA_BG=[255,227,196], ORA_EDGE=[224,138,46], ORA_INK=[122,68,0],
+      RED_BG=[251,216,221], RED_EDGE=[200,16,46], RED_INK=[140,10,31],
       PEAK_BG=[232,130,12], CDM_INK=[31,78,121];
 const SP={xs:0.07, s:0.176, q:0.247, m:0.317, l:0.353, xl:0.564};
 const DOW=["SUN","MON","TUE","WED","THU","FRI","SAT"];
@@ -529,12 +530,15 @@ function buildPDF(legs, answers){
       if(prev.to===l.from && gap>=0){
         const own = !prev.passive && !l.passive;   /* echter A/C-Turnaround */
         let bh, base, lw;
-        if(own && gap<=MIN_TURNAROUND){
+        if(own && gap<TURN_ORANGE){
+          const red = gap<TURN_RED;
+          const bg   = red?RED_BG:ORA_BG, edge = red?RED_EDGE:ORA_EDGE, ink = red?RED_INK:ORA_INK;
+          const ttl  = red?"MINIMUM TURNAROUND":"TIGHT TURNAROUND";
           bh=4.8; base=y+bh-1.5;
-          doc.setFillColor(...TURN_BG); doc.setDrawColor(...TURN_EDGE); doc.setLineWidth(0.176);
+          doc.setFillColor(...bg); doc.setDrawColor(...edge); doc.setLineWidth(0.176);
           doc.rect(X0,y,CW,bh,"FD");
-          lw=lab(X0+2.0,base,"MINIMUM TURNAROUND",6.2,TURN_INK,0.317);
-          doc.setFont("helvetica","bold"); doc.setFontSize(6.2); doc.setTextColor(...TURN_INK);
+          lw=lab(X0+2.0,base,ttl,6.2,ink,0.317);
+          doc.setFont("helvetica","bold"); doc.setFontSize(6.2); doc.setTextColor(...ink);
         } else {
           bh=4.2; base=y+bh-1.35;
           lw=lab(X0+2.0,base, own?"TURNAROUND":"GROUND", 5.8, SOFT, SP.q);
