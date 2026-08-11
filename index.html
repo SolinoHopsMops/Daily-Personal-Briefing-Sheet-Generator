@@ -86,13 +86,14 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
-      <li><b>Turnaround-Warnung zweistufig:</b> unter 50 Minuten orange (<b>TIGHT
-          TURNAROUND</b>), unter 45 Minuten rot (<b>MINIMUM TURNAROUND</b>).</li>
-      <li><b>A-CDM-Status des Abflugorts</b> in der Feldzeile: <b>A-CDM</b> bei den 34 von
-          EUROCONTROL genannten Flughäfen, sonst <b>NO A-CDM</b>. ZRH/GVA ausgenommen.
-          Advanced ATC TWR ist darin nicht abgebildet.</li>
-      <li><b>Vergangene Flugtage werden nicht mehr angeboten.</b> Die Seite startet immer
-          beim nächsten Einsatz; ein laufender Flugtag bleibt bis zur letzten Landung stehen.</li>
+      <li><b>Kompakteres Layout:</b> Überschrift „FLIGHTS" entfällt, Zeitkacheln und
+          Schnellfelder niedriger, Zeilenabstand im Flugblock enger. Remarks wächst dadurch
+          von 41 auf 57 mm, Cabin Briefing von 14 auf 19 mm.</li>
+      <li><b>Minimum Fuel bei jedem Leg</b> – nach dem letzten Flug steht dafür eine eigene
+          Zeile. Die Farbmarkierung liegt jetzt nur unter Titel, Zeit und Ort des Turnarounds,
+          nicht mehr über die ganze Zeile.</li>
+      <li><b>Crewbus ab GVA</b> wird jetzt gerechnet: erste STD &minus; 80 Minuten
+          (ZRH weiterhin &minus; 50).</li>
       <li><b>Peak Times in ZRH</b> werden orange markiert – Start oder Landung in einem der
           Fenster 07:00–08:00, 09:30–10:30, 12:00–14:00, 16:30–18:00, 19:30–21:00 LT.</li>
       <li><b>NADP richtet sich nach dem Abflugort</b> – bei Start ab ZRH/GVA entfällt das Feld,
@@ -179,7 +180,10 @@
    =========================================================================== */
 const HUBS = ["ZRH","GVA"];
 const BRIEF_OFFSET = { ZRH:67, GVA:57 };
-const CREWBUS_OFFSET = { ZRH:50 };
+const CREWBUS_OFFSET = { ZRH:50, GVA:80 };
+/* Stationen mit festem Busfahrplan: Abfahrten zu diesen Minuten jeder Stunde.
+   Gerechnete Zeit wird auf die passende oder nächstfrühere Abfahrt abgerundet. */
+const CREWBUS_SCHEDULE = { GVA:[10,30,50] };
 const DH_CREWBUS_OFFSET = 25;
 const PASSIVE_CODES = ["DH","PAX","TR"];
 const TURN_RED = 45;                // Bodenzeit unter 45 min -> rot
@@ -363,6 +367,15 @@ function peakState(l){
 const dur = mins => { const m=Math.round(mins);
   return m<60 ? `${m} MIN`
               : `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`; };
+/* STD - minus, danach auf die passende oder nächstfrühere Abfahrt abrunden */
+function busBefore(t,minus,minutes){
+  const base=(((+t.slice(0,2))*60+(+t.slice(2))-minus)%1440+1440)%1440;
+  for(let back=0;back<=60;back++){
+    const c=((base-back)%1440+1440)%1440;
+    if(minutes.includes(c%60)) return String(Math.floor(c/60)).padStart(2,"0")+":"+String(c%60).padStart(2,"0");
+  }
+  return String(Math.floor(base/60)).padStart(2,"0")+":"+String(base%60).padStart(2,"0");
+}
 function shift(t,minus){
   const x=(((+t.slice(0,2))*60+(+t.slice(2))-minus)%1440+1440)%1440;
   return String(Math.floor(x/60)).padStart(2,"0")+":"+String(x%60).padStart(2,"0");
@@ -438,11 +451,17 @@ function buildPDF(legs, answers){
     busVal=shift(leadDH.stdLT,DH_CREWBUS_OFFSET);
     busNote=`LT ${leadDH.from}  ·  DH ${leadDH.fno}  -${DH_CREWBUS_OFFSET}'`;
   } else if(CREWBUS_OFFSET[firstActive.from]){
+    const st=firstActive.from, off=CREWBUS_OFFSET[st];
     busL1="CREWBUS"; busL2="ABFAHRT";
-    busVal=shift(firstActive.stdLT,CREWBUS_OFFSET[firstActive.from]);
-    busNote=`LT ${firstActive.from}  ·  STD -${CREWBUS_OFFSET[firstActive.from]}'`;
+    if(CREWBUS_SCHEDULE[st]){
+      busVal=busBefore(firstActive.stdLT,off,CREWBUS_SCHEDULE[st]);
+      busNote=`LT ${st}  ·  STD -${off}' = ${shift(firstActive.stdLT,off)}`;
+    } else {
+      busVal=shift(firstActive.stdLT,off);
+      busNote=`LT ${st}  ·  STD -${off}'`;
+    }
   } else {
-    busL1="CREWBUS"; busL2="ABFAHRT"; busVal=null; busNote="nur bei Start ab ZRH";
+    busL1="CREWBUS"; busL2="ABFAHRT"; busVal=null; busNote="nur bei Start ab ZRH/GVA";
   }
   const briefNote = leadDH ? "entfällt – Tagesbeginn als Deadhead"
     : (off ? `LT ${firstActive.from}  ·  STD ${hm(firstActive.stdLT)}  -${off}'`
@@ -463,7 +482,7 @@ function buildPDF(legs, answers){
   y+=13.8;
 
   /* Zeitkacheln */
-  const ch=19, cwid=(CW-3)/2;
+  const ch=15, cwid=(CW-3)/2;
   [[["EXPECTED ARRIVAL","CREW BRIEFING"],briefing,briefNote,false],
    [[busL1,busL2],busVal,busNote,!!leadDH]].forEach((card,i)=>{
     const [lines,val,note,fill]=card;
@@ -472,25 +491,25 @@ function buildPDF(legs, answers){
     doc.setFillColor(...(fill?BOXFILL:WHITE));
     doc.rect(x,y,cwid,ch,fill?"FD":"S");
     const lc = val?SOFT:RULE;
-    lab(x+2,y+3.4,lines[0],6.0,lc,SP.m);
-    lab(x+2,y+6.0,lines[1],6.0,lc,SP.m);
+    lab(x+2,y+3.0,lines[0],6.0,lc,SP.m);
+    lab(x+2,y+5.5,lines[1],6.0,lc,SP.m);
     doc.setFont("courier","bold"); doc.setFontSize(16); doc.setTextColor(...(val?INK:RULE));
-    doc.text(val||"--:--", x+2, y+13.6);
-    lab(x+2,y+17.0,note,5.6,SOFT,SP.xs);
+    doc.text(val||"--:--", x+2, y+11.4);
+    lab(x+2,y+13.8,note,5.6,SOFT,SP.xs);
 
     if(i===1){                       /* Crewbus: handschriftliche Alternativzeit */
       const sx=x+33;
       doc.setDrawColor(...RULE); doc.setLineWidth(0.176);
       doc.line(sx,y+2.0,sx,y+ch-2.0);
-      lab(sx+2.5,y+4.0,"EVTL. VEREINBARTE",5.5,SOFT,0.123);
-      lab(sx+2.5,y+6.8,"CREWBUS ZEIT",5.5,SOFT,0.123);
-      wline(sx+2.5,y+13.6,cwid-33-5);
+      lab(sx+2.5,y+3.6,"EVTL. VEREINBARTE",5.5,SOFT,0.123);
+      lab(sx+2.5,y+6.2,"CREWBUS ZEIT",5.5,SOFT,0.123);
+      wline(sx+2.5,y+11.4,cwid-33-5);
     }
   });
   y+=ch+2.6;
 
   /* Schnellfelder */
-  const qh=11.5, gap=2.5;
+  const qh=9.5, gap=2.5;
   /* Baggage-Kasten exakt auf seinen Inhalt zuschneiden, Rest an CREW BAGS */
   doc.setFont("helvetica","normal"); doc.setFontSize(5.7);
   const bagLbl=doc.getTextWidth("BAGGAGE LABELN")+SP.q*14;
@@ -502,26 +521,23 @@ function buildPDF(legs, answers){
   let x=X0;
   wq.forEach((w,i)=>{
     doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.rect(x,y,w,qh,"S");
-    lab(x+1.6,y+3.4,titles[i],5.7,SOFT,SP.q);
+    lab(x+1.6,y+3.0,titles[i],5.7,SOFT,SP.q);
     if(titles[i]==="BAGGAGE LABELN"){
-      const xx=cbox(x+1.6,y+qh-3.2-3.1,"YES",3.1);
-      cbox(xx+3.0,y+qh-3.2-3.1,"NO",3.1);
-    } else wline(x+1.6,y+qh-3.2,w-3.2);
+      const xx=cbox(x+1.6,y+qh-2.6-3.1,"YES",3.1);
+      cbox(xx+3.0,y+qh-2.6-3.1,"NO",3.1);
+    } else wline(x+1.6,y+qh-2.6,w-3.2);
     x+=w+gap;
   });
   y+=qh+3.4;
 
   /* Flights */
-  const tw=lab(X0,y+2.0,"FLIGHTS",6.0,SOFT,SP.xl)+2.5;
-  doc.setLineWidth(0.212); doc.setDrawColor(...HAIR); doc.line(X0+tw,y+1.4,X1,y+1.4);
-  y+=4.6;
 
   let li=0;
   for(const l of legs){
     /* NADP hängt am Abflugort, die Turnaround-Felder am Zielort */
     const needNadp = !HUBS.includes(l.from) && !l.passive;
     const needArr  = !HUBS.includes(l.to)   && !l.passive;
-    const lh = (needNadp || needArr) ? 16.0 : 11.4;
+    const lh = (needNadp || needArr) ? 13.8 : 9.8;
 
     /* Bodenzeit zwischen zwei Flügen am selben Platz */
     if(li>0){
@@ -530,21 +546,30 @@ function buildPDF(legs, answers){
       if(prev.to===l.from && gap>=0){
         const own = !prev.passive && !l.passive;   /* echter A/C-Turnaround */
         let bh, base, lw;
+        const valTxt=`${dur(gap)}  ·  ${l.from}`;
         if(own && gap<TURN_ORANGE){
           const red = gap<TURN_RED;
           const bg   = red?RED_BG:ORA_BG, edge = red?RED_EDGE:ORA_EDGE, ink = red?RED_INK:ORA_INK;
           const ttl  = red?"MINIMUM TURNAROUND":"TIGHT TURNAROUND";
-          bh=4.8; base=y+bh-1.5;
+          bh=4.4; base=y+bh-1.3;
+          /* Farbfeld nur unter Titel, Zeit und Ort – nicht über die ganze Zeile */
+          doc.setFont("helvetica","bold"); doc.setFontSize(6.2);
+          const bandW=2.0+labW(ttl,6.2,0.317)+2.5+doc.getTextWidth(valTxt)+2.0;
           doc.setFillColor(...bg); doc.setDrawColor(...edge); doc.setLineWidth(0.176);
-          doc.rect(X0,y,CW,bh,"FD");
+          doc.rect(X0,y,bandW,bh,"FD");
           lw=lab(X0+2.0,base,ttl,6.2,ink,0.317);
           doc.setFont("helvetica","bold"); doc.setFontSize(6.2); doc.setTextColor(...ink);
         } else {
-          bh=4.2; base=y+bh-1.35;
+          bh=3.8; base=y+bh-1.2;
           lw=lab(X0+2.0,base, own?"TURNAROUND":"GROUND", 5.8, SOFT, SP.q);
           doc.setFont("helvetica","normal"); doc.setFontSize(5.8); doc.setTextColor(...SOFT);
         }
-        doc.text(`${dur(gap)}  ·  ${l.from}`, X0+2.0+lw+2.5, base);
+        doc.text(valTxt, X0+2.0+lw+2.5, base);
+        /* Minimum Fuel: feste Position, immer neutral – ausserhalb des Farbfelds */
+        const fxF=X0+54.0;
+        const fwF=lab(fxF,base,"MINIMUM FUEL:",6.2,SOFT,0.317);
+        doc.setLineWidth(0.176); doc.setDrawColor(...SOFT);
+        doc.line(fxF+fwF+1.4, base+0.6, X1-2.0, base+0.6);
         y+=bh;
       }
     }
@@ -601,7 +626,7 @@ function buildPDF(legs, answers){
     li++;
 
     /* Zeile A: immer – erwartete Flugzeit, Betankung mit PAX an Bord */
-    const fy=y+9.6;
+    const fy=y+8.4;
     let fx=X0;
     fx+=lab(fx,fy,"EXP. FLT TIME",5.8,SOFT,SP.s)+1.4;
     wline(fx,fy+0.3,13); fx+=13+6;
@@ -624,7 +649,7 @@ function buildPDF(legs, answers){
     if(needArr)  fields.push(["APU",["Y","N"]],["MAINT",["Y","N"]],
                              ["REVERSE",["Y","N"]],["FDDC",["Y","N"]]);
     if(fields.length){
-      const fy2=y+14.2;
+      const fy2=y+12.2;
       fx=X0;
       for(const [name,o] of fields){
         fx+=lab(fx,fy2,name,5.8,SOFT,SP.s)+1.4;
@@ -641,6 +666,15 @@ function buildPDF(legs, answers){
       }
     }
     y+=lh;
+
+    /* Nach dem letzten Leg eine eigene Fuel-Zeile, damit jeder Flug eine hat */
+    if(li===legs.length){        /* li wurde oben bereits hochgezählt */
+      const fbh=3.8, fbase=y+fbh-1.2, fxF=X0+54.0;
+      const fwF=lab(fxF,fbase,"MINIMUM FUEL:",6.2,SOFT,0.317);
+      doc.setLineWidth(0.176); doc.setDrawColor(...SOFT);
+      doc.line(fxF+fwF+1.4, fbase+0.6, X1-2.0, fbase+0.6);
+      y+=fbh;
+    }
   }
   doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(X0,y,X1,y);
   y+=2.8;
