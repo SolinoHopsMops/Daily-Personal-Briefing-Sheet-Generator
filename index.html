@@ -86,12 +86,12 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
+      <li><b>PAX-Zählung</b> auf der Flugnummernzeile: Kästchen <b>C</b> für zwei und
+          <b>Y</b> für drei Stellen. Das Peak-Kennzeichen ist dafür eine Zeile tiefer
+          gerückt, rechtsbündig neben die Feldzeile.</li>
       <li><b>Kompakteres Layout:</b> Überschrift „FLIGHTS" entfällt, Zeitkacheln und
           Schnellfelder niedriger, Zeilenabstand im Flugblock enger. Remarks wächst dadurch
           von 41 auf 57 mm, Cabin Briefing von 14 auf 19 mm.</li>
-      <li><b>Minimum Fuel bei jedem Leg</b> – nach dem letzten Flug steht dafür eine eigene
-          Zeile. Die Farbmarkierung liegt jetzt nur unter Titel, Zeit und Ort des Turnarounds,
-          nicht mehr über die ganze Zeile.</li>
       <li><b>Crewbus ab GVA</b> wird jetzt gerechnet: erste STD &minus; 80 Minuten
           (ZRH weiterhin &minus; 50).</li>
       <li><b>Peak Times in ZRH</b> werden orange markiert – Start oder Landung in einem der
@@ -430,6 +430,17 @@ function buildPDF(legs, answers){
     doc.text(txt,x+1.4,yTop+h-1.15);
     return w;
   };
+  /* PAX  C [2 Stellen]  Y [3 Stellen] – liefert die Endposition */
+  const paxGroup=(x,y)=>{
+    x+=lab(x,y,"PAX",5.8,SOFT,SP.s)+1.8;
+    doc.setLineWidth(0.212); doc.setDrawColor(...INK);
+    for(const [lbl,w] of [["C",7.0],["Y",9.5]]){
+      x+=lab(x,y,lbl,5.8,SOFT,SP.s)+0.9;
+      doc.rect(x,y-4.0+1.1,w,4.0,"S");
+      x+=w+2.2;
+    }
+    return x-2.2;
+  };
   const rbox=(x,yTop,w,h,title)=>{
     doc.setLineWidth(0.317); doc.setDrawColor(...INK); doc.rect(x,yTop,w,h,"S");
     const head=4.4;
@@ -606,23 +617,8 @@ function buildPDF(legs, answers){
         used += badge(X1-bw-2.0, y+1.5, sch?"SCH":"N-SCH", sch?"SCH":"NSCH")+2.0;
       }
     }
-    /* Peak Time in ZRH: orange Markierung, Text so lang wie der Platz zulässt */
-    const pk=peakState(l);
-    if(pk){
-      const px=X0+17.5+rw+1.6+labW(typTxt,6.4,SP.xs)+2.5;
-      const free=X1-used-px;
-      for(const txt of [`PEAK ${pk} · EXPECT DELAY`,`PEAK ${pk} · DELAY`,`PEAK ${pk}`]){
-        doc.setFont("courier","bold"); doc.setFontSize(6.6);
-        const w=doc.getTextWidth(txt)+2.8;
-        if(w<=free){
-          doc.setFillColor(...PEAK_BG); doc.setDrawColor(...PEAK_BG); doc.setLineWidth(0.282);
-          doc.rect(px,y+1.5,w,3.9,"FD");
-          doc.setFont("courier","bold"); doc.setFontSize(6.6); doc.setTextColor(...WHITE);
-          doc.text(txt,px+1.4,y+1.5+3.9-1.15);
-          break;
-        }
-      }
-    }
+    /* PAX-Zählung auf der Flugnummernzeile */
+    if(!l.passive) paxGroup(X0+17.5+rw+1.6+labW(typTxt,6.4,SP.xs)+3.0, y+4.5);
     li++;
 
     /* Zeile A: immer – erwartete Flugzeit, Betankung mit PAX an Bord */
@@ -642,6 +638,23 @@ function buildPDF(legs, answers){
       fx+=lab(fx,fy,"CUT-FREQ",5.8,SOFT,SP.s)+1.4;
       wline(fx,fy+0.3,15.0);
     }
+    /* Peak Time in ZRH: rechtsbündig am Ende der Feldzeile A */
+    const pk=peakState(l);
+    if(pk){
+      const free=X1-fx-2.0;
+      for(const txt of [`PEAK ${pk} · EXPECT DELAY`,`PEAK ${pk} · DELAY`,`PEAK ${pk}`]){
+        doc.setFont("courier","bold"); doc.setFontSize(6.6);
+        const w=doc.getTextWidth(txt)+2.8;
+        if(w<=free){
+          doc.setFillColor(...PEAK_BG); doc.setDrawColor(...PEAK_BG); doc.setLineWidth(0.282);
+          doc.rect(X1-w,fy-1.15-3.9+3.9,w,3.9,"FD");
+          doc.setFont("courier","bold"); doc.setFontSize(6.6); doc.setTextColor(...WHITE);
+          doc.text(txt,X1-w+1.4,fy);
+          break;
+        }
+      }
+    }
+
     /* Zeile B: NADP bei Abflug ausserhalb ZRH/GVA,
        APU/MAINT/REVERSE/FDDC bei Landung ausserhalb ZRH/GVA */
     const fields=[];
