@@ -86,12 +86,13 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
+      <li><b>A-CDM-Liste kommt jetzt aus der offiziellen Quelle:</b> EUROCONTROL Network
+          Manager, NOM-IN/25-019 vom 24.07.2025. Gekennzeichnet werden die Kategorien
+          <b>CDM</b> und <b>ANI</b> – beide bedeuten TOBT/TSAT. <b>Advanced ATC TWR</b>
+          wird bewusst nicht gekennzeichnet, dort ändert sich am Ablauf nichts.</li>
       <li><b>PAX-Zählung</b> auf der Flugnummernzeile: Kästchen <b>C</b> für zwei und
           <b>Y</b> für drei Stellen. Das Peak-Kennzeichen ist dafür eine Zeile tiefer
           gerückt, rechtsbündig neben die Feldzeile.</li>
-      <li><b>Kompakteres Layout:</b> Überschrift „FLIGHTS" entfällt, Zeitkacheln und
-          Schnellfelder niedriger, Zeilenabstand im Flugblock enger. Remarks wächst dadurch
-          von 41 auf 57 mm, Cabin Briefing von 14 auf 19 mm.</li>
       <li><b>Crewbus ab GVA</b> wird jetzt gerechnet: erste STD &minus; 80 Minuten
           (ZRH weiterhin &minus; 50).</li>
       <li><b>Peak Times in ZRH</b> werden orange markiert – Start oder Landung in einem der
@@ -192,13 +193,23 @@ const TURN_ORANGE = 50;             // Bodenzeit unter 50 min -> orange
 const ZRH_PEAKS = [["0700","0800"],["0930","1030"],["1200","1400"],
                    ["1630","1800"],["1930","2100"]];
 const PEAK_APT = "ZRH";
-/* Voll implementiertes A-CDM, 34 Flughäfen laut EUROCONTROL
-   (eurocontrol.int/concept/airport-collaborative-decision-making, abgerufen 08.08.2026).
-   Das abgestufte "Advanced ATC TWR" ist dort nicht namentlich aufgeführt und
-   daher hier nicht abgebildet – "NO A-CDM" heisst also: kein volles A-CDM. */
-const CDM_AIRPORTS = new Set(["ALC","AMS","BCN","BGY","BER","BRU","CPH","DUS","FRA","GVA",
-  "HAM","HEL","LIS","LHR","LGW","LYS","MAD","AGP","LIN","MXP","MUC","NAP","NCE","OSL","PMI",
-  "CDG","ORY","PRG","RIX","FCO","STR","VCE","VIE","ZRH"]);
+/* Stationen, an denen TOBT/TSAT läuft.
+   QUELLENLAGE: Die EUROCONTROL-Kategorien (NOM-IN/25-019) beschreiben die
+   Netzwerk-Integration über DPI, nicht ob ein Platz lokal TOBT/TSAT betreibt –
+   beides fällt nachweislich auseinander.
+   Ebene 1: "CDM airport" und "ANI airport" laut NOM-IN/25-019 vom 24.07.2025.
+   Ebene 2: einzeln beim Betreiber geprüft – MAN (publiziert TSAT-Fenster ±5 min
+   und Alert CDM08, von NM als Advanced ATC TWR geführt), DUB (IAA betreibt
+   Pre-Departure Sequencer, in keiner EUROCONTROL-Liste), GVA (in IN/25-005
+   als CDM geführt, in IN/25-019 ohne Begründung gestrichen).
+   Geprüft und bewusst nicht aufgenommen: AYT (seit 18.05.2026 Advanced ATC TWR),
+   BEG (A-CDM-Pretrial seit 03/2025, kein Regelbetrieb belegt).
+   Alle übrigen Stationen sind nicht einzeln geprüft – fehlendes Kennzeichen
+   heisst "nicht belegt". Massgeblich bleiben die Firmenunterlagen. */
+const CDM_AIRPORTS = new Set(["BRU","BER","FRA","HAM","DUS","MUC","STR","HEL",
+  "LGW","LHR","AMS","CPH","OSL","RIX","ALC","BCN","MAD","AGP","PMI","LYS","NCE",
+  "CDG","ORY","MXP","BGY","LIN","VCE","FCO","NAP","PRG","VIE","LIS","ZRH",
+  "GVA","DUB","MAN"]);
 const HUB_SAME_AC_H = 2;            // Bodenzeit am Hub, bis zu der dasselbe Muster plausibel ist
 const DUTY_SPLIT_H = 6;
 
@@ -670,12 +681,11 @@ function buildPDF(legs, answers){
         fx=cbox(fx,fy2-2.1,o[1],2.9)+2.8;
       }
       /* A-CDM-Status des Abflugorts (ZRH/GVA ausgenommen) */
-      if(needNadp){
-        const cdm=CDM_AIRPORTS.has(l.from);
-        const ctxt=cdm?"A-CDM":"NO A-CDM";
+      /* Nur belegte Fälle kennzeichnen – keine Aussage über die übrigen */
+      if(needNadp && CDM_AIRPORTS.has(l.from)){
         doc.setFont("courier","bold"); doc.setFontSize(6.6);
-        const cw_=doc.getTextWidth(ctxt)+2.8;
-        badge(fx+1.2+cw_, fy2-3.9+1.15, ctxt, cdm?"CDM":"NOCDM");
+        const cw_=doc.getTextWidth("A-CDM")+2.8;
+        badge(fx+1.2+cw_, fy2-3.9+1.15, "A-CDM", "CDM");
       }
     }
     y+=lh;
