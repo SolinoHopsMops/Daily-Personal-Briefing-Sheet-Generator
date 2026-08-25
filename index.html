@@ -428,6 +428,8 @@ function buildPDF(legs, answers){
       doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...WHITE); }
     else if(kind==="NOTREQ"||kind==="SCH"){ doc.setFillColor(...WHITE); doc.setDrawColor(...GREEN); doc.setLineWidth(0.282);
       doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...GREEN); }
+    else if(kind==="PEAK"){ doc.setFillColor(...PEAK_BG); doc.setDrawColor(...PEAK_BG); doc.setLineWidth(0.282);
+      doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...WHITE); }
     else if(kind==="CDM"){ doc.setFillColor(...CDM_INK); doc.setDrawColor(...CDM_INK); doc.setLineWidth(0.282);
       doc.rect(x,yTop,w,h,"FD"); doc.setTextColor(...WHITE); }
     else if(kind==="NOCDM"){ doc.setFillColor(...WHITE); doc.setDrawColor(...RULE); doc.setLineWidth(0.212);
@@ -683,12 +685,9 @@ function buildPDF(legs, answers){
       const free=X1-fx-2.0;
       for(const txt of [`PEAK ${pk} · EXPECT DELAY`,`PEAK ${pk} · DELAY`,`PEAK ${pk}`]){
         doc.setFont("courier","bold"); doc.setFontSize(6.6);
-        const w=doc.getTextWidth(txt)+2.8;
-        if(w<=free){
-          doc.setFillColor(...PEAK_BG); doc.setDrawColor(...PEAK_BG); doc.setLineWidth(0.282);
-          doc.rect(X1-w,fy-1.15-3.9+3.9,w,3.9,"FD");
-          doc.setFont("courier","bold"); doc.setFontSize(6.6); doc.setTextColor(...WHITE);
-          doc.text(txt,X1-w+1.4,fy);
+        if(doc.getTextWidth(txt)+2.8<=free){
+          /* gleiche Ausrichtung wie ASS und A-CDM */
+          badge(X1, fy-2.75, txt, "PEAK");
           break;
         }
       }
