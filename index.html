@@ -86,20 +86,18 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
+      <li><b>Rolle</b> als Kästchen für zwei Stellen, rechts neben Minimum Fuel.
+          Die Schreiblinie für Minimum Fuel ist dafür auf rund 16 Zeichen gekürzt.</li>
+      <li><b>Meetingpoint Siko bei Start ab GVA:</b> zweite fette Zeit neben der
+          Crewbus-Abfahrt, gerechnet als erste STD &minus; 45 Minuten.</li>
       <li><b>A-CDM-Liste kommt jetzt aus der offiziellen Quelle:</b> EUROCONTROL Network
           Manager, NOM-IN/25-019 vom 24.07.2025. Gekennzeichnet werden die Kategorien
           <b>CDM</b> und <b>ANI</b> – beide bedeuten TOBT/TSAT. <b>Advanced ATC TWR</b>
           wird bewusst nicht gekennzeichnet, dort ändert sich am Ablauf nichts.</li>
-      <li><b>PAX-Zählung</b> auf der Flugnummernzeile: Kästchen <b>C</b> für zwei und
-          <b>Y</b> für drei Stellen. Das Peak-Kennzeichen ist dafür eine Zeile tiefer
-          gerückt, rechtsbündig neben die Feldzeile.</li>
       <li><b>Crewbus ab GVA</b> wird jetzt gerechnet: erste STD &minus; 80 Minuten
           (ZRH weiterhin &minus; 50).</li>
       <li><b>Peak Times in ZRH</b> werden orange markiert – Start oder Landung in einem der
           Fenster 07:00–08:00, 09:30–10:30, 12:00–14:00, 16:30–18:00, 19:30–21:00 LT.</li>
-      <li><b>NADP richtet sich nach dem Abflugort</b> – bei Start ab ZRH/GVA entfällt das Feld,
-          bei allen anderen Abflugorten steht es da. Neu ausserdem <b>FDDC</b> (Y/N) bei jedem
-          Flug, der ausserhalb von ZRH/GVA landet.</li>
     </ol>
     <p class="note">Es werden die fünf jüngsten Änderungen gezeigt.</p>
   </details>
@@ -185,6 +183,7 @@ const CREWBUS_OFFSET = { ZRH:50, GVA:80 };
 /* Stationen mit festem Busfahrplan: Abfahrten zu diesen Minuten jeder Stunde.
    Gerechnete Zeit wird auf die passende oder nächstfrühere Abfahrt abgerundet. */
 const CREWBUS_SCHEDULE = { GVA:[10,30,50] };
+const MEETING_OFFSET = { GVA:45 };   /* Meetingpoint Siko, min vor STD */
 const DH_CREWBUS_OFFSET = 25;
 const PASSIVE_CODES = ["DH","PAX","TR"];
 const TURN_RED = 45;                // Bodenzeit unter 45 min -> rot
@@ -441,6 +440,20 @@ function buildPDF(legs, answers){
     doc.text(txt,x+1.4,yTop+h-1.15);
     return w;
   };
+  /* MINIMUM FUEL: ____   ROLLE: [2 Stellen] – feste Positionen */
+  const fuelRolleRow=yBase=>{
+    const fx=X0+54.0;
+    const fw=lab(fx,yBase,"MINIMUM FUEL:",6.2,SOFT,0.317);
+    const box=8.0;
+    const rw=labW("ROLLE:",6.2,0.317)+0.9+box;
+    const rx=X1-2.0-rw;
+    doc.setLineWidth(0.176); doc.setDrawColor(...SOFT);
+    doc.line(fx+fw+1.4, yBase+0.6, rx-4.0, yBase+0.6);
+    lab(rx,yBase,"ROLLE:",6.2,SOFT,0.317);
+    doc.setLineWidth(0.212); doc.setDrawColor(...INK);
+    doc.rect(X1-2.0-box, yBase-4.0+1.1, box, 4.0, "S");
+  };
+
   /* PAX  C [2 Stellen]  Y [3 Stellen] – liefert die Endposition */
   const paxGroup=(x,y)=>{
     x+=lab(x,y,"PAX",5.8,SOFT,SP.s)+1.8;
@@ -504,30 +517,48 @@ function buildPDF(legs, answers){
   y+=13.8;
 
   /* Zeitkacheln */
-  const ch=15, cwid=(CW-3)/2;
-  [[["EXPECTED ARRIVAL","CREW BRIEFING"],briefing,briefNote,false],
-   [[busL1,busL2],busVal,busNote,!!leadDH]].forEach((card,i)=>{
-    const [lines,val,note,fill]=card;
-    const x=X0+i*(cwid+3);
-    doc.setLineWidth(0.317); doc.setDrawColor(...(val?INK:RULE));
-    doc.setFillColor(...(fill?BOXFILL:WHITE));
-    doc.rect(x,y,cwid,ch,fill?"FD":"S");
-    const lc = val?SOFT:RULE;
-    lab(x+2,y+3.0,lines[0],6.0,lc,SP.m);
-    lab(x+2,y+5.5,lines[1],6.0,lc,SP.m);
-    doc.setFont("courier","bold"); doc.setFontSize(16); doc.setTextColor(...(val?INK:RULE));
-    doc.text(val||"--:--", x+2, y+11.4);
-    lab(x+2,y+13.8,note,5.6,SOFT,SP.xs);
+  const ch=15;
+  const cw1=42.0, cw2=CW-cw1-3.0;      /* Crewbus breiter wegen der Zonen */
 
-    if(i===1){                       /* Crewbus: handschriftliche Alternativzeit */
-      const sx=x+33;
-      doc.setDrawColor(...RULE); doc.setLineWidth(0.176);
-      doc.line(sx,y+2.0,sx,y+ch-2.0);
-      lab(sx+2.5,y+3.6,"EVTL. VEREINBARTE",5.5,SOFT,0.123);
-      lab(sx+2.5,y+6.2,"CREWBUS ZEIT",5.5,SOFT,0.123);
-      wline(sx+2.5,y+11.4,cwid-33-5);
-    }
-  });
+  /* Meetingpoint nur bei aktivem Start an einer Station mit Vorgabe */
+  const siko = leadDH ? null
+    : (MEETING_OFFSET[firstActive.from]
+       ? shift(firstActive.stdLT, MEETING_OFFSET[firstActive.from]) : null);
+
+  const timeZone=(x,lines,val,note)=>{
+    const lc = val?SOFT:RULE;
+    lab(x,y+3.0,lines[0],6.0,lc,SP.m);
+    lab(x,y+5.5,lines[1],6.0,lc,SP.m);
+    doc.setFont("courier","bold"); doc.setFontSize(16);
+    doc.setTextColor(...(val?INK:RULE));
+    doc.text(val||"--:--", x, y+11.4);
+    lab(x,y+13.8,note,5.6,SOFT,SP.xs);
+  };
+  const divider=x=>{ doc.setDrawColor(...RULE); doc.setLineWidth(0.176);
+                     doc.line(x,y+2.0,x,y+ch-2.0); };
+
+  /* Kachel 1: Crew Briefing */
+  doc.setLineWidth(0.317); doc.setDrawColor(...(briefing?INK:RULE));
+  doc.rect(X0,y,cw1,ch,"S");
+  timeZone(X0+2.0,["EXPECTED ARRIVAL","CREW BRIEFING"],briefing,briefNote);
+
+  /* Kachel 2: Crewbus, ggf. mit Meetingpoint */
+  const x2=X0+cw1+3.0;
+  doc.setLineWidth(0.317); doc.setDrawColor(...(busVal?INK:RULE));
+  doc.setFillColor(...(leadDH?BOXFILL:WHITE));
+  doc.rect(x2,y,cw2,ch,leadDH?"FD":"S");
+  timeZone(x2+2.0,[busL1,busL2],busVal,busNote);
+  divider(x2+32.0);
+  let sx;
+  if(siko){
+    timeZone(x2+34.5,["MEETINGPOINT","SIKO"],siko,
+             `LT ${firstActive.from}  ·  STD -${MEETING_OFFSET[firstActive.from]}'`);
+    divider(x2+64.0);
+    sx=x2+66.5;
+  } else sx=x2+34.5;
+  lab(sx,y+3.6,"EVTL. VEREINBARTE",5.5,SOFT,0.123);
+  lab(sx,y+6.2,"CREWBUS ZEIT",5.5,SOFT,0.123);
+  wline(sx,y+11.4,x2+cw2-2.0-sx);
   y+=ch+2.6;
 
   /* Schnellfelder */
@@ -587,11 +618,8 @@ function buildPDF(legs, answers){
           doc.setFont("helvetica","normal"); doc.setFontSize(5.8); doc.setTextColor(...SOFT);
         }
         doc.text(valTxt, X0+2.0+lw+2.5, base);
-        /* Minimum Fuel: feste Position, immer neutral – ausserhalb des Farbfelds */
-        const fxF=X0+54.0;
-        const fwF=lab(fxF,base,"MINIMUM FUEL:",6.2,SOFT,0.317);
-        doc.setLineWidth(0.176); doc.setDrawColor(...SOFT);
-        doc.line(fxF+fwF+1.4, base+0.6, X1-2.0, base+0.6);
+        /* Minimum Fuel und Rolle: feste Positionen, ausserhalb des Farbfelds */
+        fuelRolleRow(base);
         y+=bh;
       }
     }
@@ -692,10 +720,8 @@ function buildPDF(legs, answers){
 
     /* Nach dem letzten Leg eine eigene Fuel-Zeile, damit jeder Flug eine hat */
     if(li===legs.length){        /* li wurde oben bereits hochgezählt */
-      const fbh=3.8, fbase=y+fbh-1.2, fxF=X0+54.0;
-      const fwF=lab(fxF,fbase,"MINIMUM FUEL:",6.2,SOFT,0.317);
-      doc.setLineWidth(0.176); doc.setDrawColor(...SOFT);
-      doc.line(fxF+fwF+1.4, fbase+0.6, X1-2.0, fbase+0.6);
+      const fbh=3.8, fbase=y+fbh-1.2;
+      fuelRolleRow(fbase);
       y+=fbh;
     }
   }
