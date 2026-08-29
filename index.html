@@ -86,18 +86,18 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
-      <li><b>Rolle</b> als Kästchen für zwei Stellen, rechts neben Minimum Fuel.
+      <li><b>Start ausserhalb ZRH/GVA:</b> statt Crew Briefing und Crewbus erscheint oben
+          ein Feld <b>Vereinbarte Pick-up Time</b> über die volle Breite. Der Kasten
+          <b>Brf Room</b> entfällt, sein Platz geht an First Slot / ETD.</li>
+      <li><b>Crew Call / Pick-up Times</b> neben dem Titel Cabin Briefing – nur an Tagen,
+          an denen die Rotation ausserhalb von ZRH/GVA endet. Die Klammer mit den
+          Stichworten im Titel ist entfallen.</li>
+      <li><b>Fueling with PAX</b> entfällt bei Flügen, die in ZRH/GVA beginnen – das Feld
+          erscheint nur noch auf dem Weg von einer Outstation zurück zur Basis.</li>
+      <li><b>PF/PM</b> als Kästchen für zwei Stellen, rechts neben Minimum Fuel.
           Die Schreiblinie für Minimum Fuel ist dafür auf rund 16 Zeichen gekürzt.</li>
       <li><b>Meetingpoint Siko bei Start ab GVA:</b> zweite fette Zeit neben der
           Crewbus-Abfahrt, gerechnet als erste STD &minus; 45 Minuten.</li>
-      <li><b>A-CDM-Liste kommt jetzt aus der offiziellen Quelle:</b> EUROCONTROL Network
-          Manager, NOM-IN/25-019 vom 24.07.2025. Gekennzeichnet werden die Kategorien
-          <b>CDM</b> und <b>ANI</b> – beide bedeuten TOBT/TSAT. <b>Advanced ATC TWR</b>
-          wird bewusst nicht gekennzeichnet, dort ändert sich am Ablauf nichts.</li>
-      <li><b>Crewbus ab GVA</b> wird jetzt gerechnet: erste STD &minus; 80 Minuten
-          (ZRH weiterhin &minus; 50).</li>
-      <li><b>Peak Times in ZRH</b> werden orange markiert – Start oder Landung in einem der
-          Fenster 07:00–08:00, 09:30–10:30, 12:00–14:00, 16:30–18:00, 19:30–21:00 LT.</li>
     </ol>
     <p class="note">Es werden die fünf jüngsten Änderungen gezeigt.</p>
   </details>
@@ -442,16 +442,16 @@ function buildPDF(legs, answers){
     doc.text(txt,x+1.4,yTop+h-1.15);
     return w;
   };
-  /* MINIMUM FUEL: ____   ROLLE: [2 Stellen] – feste Positionen */
+  /* MINIMUM FUEL: ____   PF/PM: [2 Stellen] – feste Positionen */
   const fuelRolleRow=yBase=>{
     const fx=X0+54.0;
     const fw=lab(fx,yBase,"MINIMUM FUEL:",6.2,SOFT,0.317);
     const box=8.0;
-    const rw=labW("ROLLE:",6.2,0.317)+0.9+box;
+    const rw=labW("PF/PM:",6.2,0.317)+0.9+box;
     const rx=X1-2.0-rw;
     doc.setLineWidth(0.176); doc.setDrawColor(...SOFT);
     doc.line(fx+fw+1.4, yBase+0.6, rx-4.0, yBase+0.6);
-    lab(rx,yBase,"ROLLE:",6.2,SOFT,0.317);
+    lab(rx,yBase,"PF/PM:",6.2,SOFT,0.317);
     doc.setLineWidth(0.212); doc.setDrawColor(...INK);
     doc.rect(X1-2.0-box, yBase-4.0+1.1, box, 4.0, "S");
   };
@@ -467,11 +467,18 @@ function buildPDF(legs, answers){
     }
     return x-2.2;
   };
-  const rbox=(x,yTop,w,h,title)=>{
+  const rbox=(x,yTop,w,h,title,extra)=>{
     doc.setLineWidth(0.317); doc.setDrawColor(...INK); doc.rect(x,yTop,w,h,"S");
-    const head=4.4;
+    const head = extra ? 6.5 : 4.4;      /* mit Zusatzfeld höhere Kopfleiste */
     doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(x,yTop+head,x+w,yTop+head);
-    lab(x+1.6,yTop+head-1.5,title,6.0,INK,SP.m);
+    const base = yTop+head-2.0;
+    lab(x+1.6,base,title,6.0,INK,SP.m);
+    if(extra){
+      const ex = x+40.0;                 /* feste Spalte, damit es nicht wandert */
+      const ew = lab(ex,base,extra,6.0,SOFT,SP.m);
+      doc.setLineWidth(0.176); doc.setDrawColor(...SOFT);
+      doc.line(ex+ew+1.4, base+0.6, x+w-1.6, base+0.6);
+    }
     doc.setLineWidth(0.141); doc.setDrawColor(...HAIR);
     for(let yy=yTop+head+6; yy<yTop+h-2.5; yy+=6) doc.line(x+1.6,yy,x+w-1.6,yy);
   };
@@ -539,6 +546,18 @@ function buildPDF(legs, answers){
   const divider=x=>{ doc.setDrawColor(...RULE); doc.setLineWidth(0.176);
                      doc.line(x,y+2.0,x,y+ch-2.0); };
 
+  /* Start ausserhalb ZRH/GVA: die beiden Zeitkacheln sind gegenstandslos,
+     stattdessen ein Feld für die vereinbarte Pick-up Time */
+  if(!HUBS.includes(legs[0].from)){
+    doc.setLineWidth(0.317); doc.setDrawColor(...INK);
+    doc.rect(X0,y,CW,ch,"S");
+    lab(X0+2.0,y+3.0,"VEREINBARTE",6.0,SOFT,SP.m);
+    lab(X0+2.0,y+5.5,"PICK-UP TIME",6.0,SOFT,SP.m);
+    wline(X0+2.0,y+11.4,CW-4.0);
+    lab(X0+2.0,y+13.8,`LT ${legs[0].from}  ·  erster Flug ${hm(firstActive.stdLT)}`,5.6,SOFT,SP.xs);
+    y+=ch+2.6;
+  } else {
+
   /* Kachel 1: Crew Briefing */
   doc.setLineWidth(0.317); doc.setDrawColor(...(briefing?INK:RULE));
   doc.rect(X0,y,cw1,ch,"S");
@@ -562,6 +581,7 @@ function buildPDF(legs, answers){
   lab(sx,y+6.2,"CREWBUS ZEIT",5.5,SOFT,0.123);
   wline(sx,y+11.4,x2+cw2-2.0-sx);
   y+=ch+2.6;
+  }
 
   /* Schnellfelder */
   const qh=9.5, gap=2.5;
@@ -571,8 +591,16 @@ function buildPDF(legs, answers){
   doc.setFont("courier","bold"); doc.setFontSize(7.2);
   const bagRow=3.1+0.8+doc.getTextWidth("YES")+3.0+3.1+0.8+doc.getTextWidth("NO");
   const bagW=Math.max(bagLbl,bagRow)+3.2, crewW=16+(33-bagW);
-  const wq=[17,20,0,crewW,bagW]; wq[2]=CW-(17+20+crewW+bagW+gap*4);
-  const titles=["STAND","BRF ROOM","FIRST SLOT / ETD","CREW BAGS","BAGGAGE LABELN"];
+  /* Briefingraum gibt es nur an den Basen – bei Start ausserhalb entfällt der Kasten,
+     der Platz geht an FIRST SLOT / ETD */
+  const atBase = HUBS.includes(legs[0].from);
+  const titles = atBase
+    ? ["STAND","BRF ROOM","FIRST SLOT / ETD","CREW BAGS","BAGGAGE LABELN"]
+    : ["STAND","FIRST SLOT / ETD","CREW BAGS","BAGGAGE LABELN"];
+  const fixed = atBase ? [17,20,0,crewW,bagW] : [17,0,crewW,bagW];
+  const flex = titles.indexOf("FIRST SLOT / ETD");
+  const wq = fixed.slice();
+  wq[flex] = CW - (fixed.reduce((a,b)=>a+b,0) + gap*(wq.length-1));
   let x=X0;
   wq.forEach((w,i)=>{
     doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.rect(x,y,w,qh,"S");
@@ -667,8 +695,9 @@ function buildPDF(legs, answers){
     let fx=X0;
     fx+=lab(fx,fy,"EXP. FLT TIME",5.8,SOFT,SP.s)+1.4;
     wline(fx,fy+0.3,13); fx+=13+6;
-    /* Betankung mit PAX an Bord: nur bei Landung in ZRH/GVA, nie vorausgefüllt */
-    if(HUBS.includes(l.to) && !l.passive){
+    /* Betankung mit PAX an Bord: nur bei Landung in ZRH/GVA und Abflug ausserhalb,
+       nie vorausgefüllt. Hub-zu-Hub-Legs bekommen das Feld nicht. */
+    if(HUBS.includes(l.to) && !HUBS.includes(l.from) && !l.passive){
       fx+=lab(fx,fy,"FUELING W/ PAX",5.8,SOFT,SP.s)+1.4;
       fx=cbox(fx,fy-2.1,"Y",2.9)+1.0;
       fx=cbox(fx,fy-2.1,"N",2.9)+1.0;
@@ -731,7 +760,9 @@ function buildPDF(legs, answers){
   const avail=BOTY-4.2-y-2.6;
   const hCab=avail*0.25;          /* Cabin Briefing oben, ein Viertel */
   const hRem=avail*0.75;          /* Remarks darunter, drei Viertel   */
-  rbox(X0,y,CW,hCab,"CABIN BRIEFING  (WX, TECHNISCHES, PADs, ROLLZEIT, ...)");
+  /* Zusatzfeld nur, wenn die Rotation ausserhalb ZRH/GVA endet */
+  const layover = !HUBS.includes(legs[legs.length-1].to);
+  rbox(X0,y,CW,hCab,"CABIN BRIEFING", layover ? "CREW CALL / PICK-UP TIMES" : null);
   y+=hCab+2.6;
   rbox(X0,y,CW,hRem,"REMARKS");
 
