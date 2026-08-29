@@ -86,9 +86,10 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
-      <li><b>Start ausserhalb ZRH/GVA:</b> statt Crew Briefing und Crewbus erscheint oben
-          ein Feld <b>Vereinbarte Pick-up Time</b> über die volle Breite. Der Kasten
-          <b>Brf Room</b> entfällt, sein Platz geht an First Slot / ETD.</li>
+      <li><b>Start ausserhalb ZRH/GVA:</b> Die Kachelzeile mit Crew Briefing und Crewbus
+          entfällt komplett. <b>Pick-up Time</b> steht stattdessen als erstes Feld in der
+          Schnellfeldreihe, <b>Brf Room</b> fällt weg. Remarks wächst dadurch von 57 auf
+          73 mm, Cabin Briefing von 19 auf 24 mm.</li>
       <li><b>Crew Call / Pick-up Times</b> neben dem Titel Cabin Briefing – nur an Tagen,
           an denen die Rotation ausserhalb von ZRH/GVA endet. Die Klammer mit den
           Stichworten im Titel ist entfallen.</li>
@@ -546,17 +547,10 @@ function buildPDF(legs, answers){
   const divider=x=>{ doc.setDrawColor(...RULE); doc.setLineWidth(0.176);
                      doc.line(x,y+2.0,x,y+ch-2.0); };
 
-  /* Start ausserhalb ZRH/GVA: die beiden Zeitkacheln sind gegenstandslos,
-     stattdessen ein Feld für die vereinbarte Pick-up Time */
-  if(!HUBS.includes(legs[0].from)){
-    doc.setLineWidth(0.317); doc.setDrawColor(...INK);
-    doc.rect(X0,y,CW,ch,"S");
-    lab(X0+2.0,y+3.0,"VEREINBARTE",6.0,SOFT,SP.m);
-    lab(X0+2.0,y+5.5,"PICK-UP TIME",6.0,SOFT,SP.m);
-    wline(X0+2.0,y+11.4,CW-4.0);
-    lab(X0+2.0,y+13.8,`LT ${legs[0].from}  ·  erster Flug ${hm(firstActive.stdLT)}`,5.6,SOFT,SP.xs);
-    y+=ch+2.6;
-  } else {
+  /* Zeitkacheln nur bei Start an einer Basis. Ausserhalb wandert die Pick-up Time
+     in die Schnellfeldreihe – spart die ganze Kachelzeile. */
+  const atBase = HUBS.includes(legs[0].from);
+  if(atBase){
 
   /* Kachel 1: Crew Briefing */
   doc.setLineWidth(0.317); doc.setDrawColor(...(briefing?INK:RULE));
@@ -591,13 +585,11 @@ function buildPDF(legs, answers){
   doc.setFont("courier","bold"); doc.setFontSize(7.2);
   const bagRow=3.1+0.8+doc.getTextWidth("YES")+3.0+3.1+0.8+doc.getTextWidth("NO");
   const bagW=Math.max(bagLbl,bagRow)+3.2, crewW=16+(33-bagW);
-  /* Briefingraum gibt es nur an den Basen – bei Start ausserhalb entfällt der Kasten,
-     der Platz geht an FIRST SLOT / ETD */
-  const atBase = HUBS.includes(legs[0].from);
+  /* An der Basis: Briefingraum. Ausserhalb: kein Briefingraum, dafür die Pick-up Time */
   const titles = atBase
     ? ["STAND","BRF ROOM","FIRST SLOT / ETD","CREW BAGS","BAGGAGE LABELN"]
-    : ["STAND","FIRST SLOT / ETD","CREW BAGS","BAGGAGE LABELN"];
-  const fixed = atBase ? [17,20,0,crewW,bagW] : [17,0,crewW,bagW];
+    : ["PICK-UP TIME","STAND","FIRST SLOT / ETD","CREW BAGS","BAGGAGE LABELN"];
+  const fixed = atBase ? [17,20,0,crewW,bagW] : [34,17,0,crewW,bagW];
   const flex = titles.indexOf("FIRST SLOT / ETD");
   const wq = fixed.slice();
   wq[flex] = CW - (fixed.reduce((a,b)=>a+b,0) + gap*(wq.length-1));
