@@ -93,12 +93,13 @@
       <li><b>Crew Call / Pick-up Times</b> neben dem Titel Cabin Briefing – nur an Tagen,
           an denen die Rotation ausserhalb von ZRH/GVA endet. Die Klammer mit den
           Stichworten im Titel ist entfallen.</li>
-      <li><b>Fueling with PAX</b> entfällt bei Flügen, die in ZRH/GVA beginnen – das Feld
-          erscheint nur noch auf dem Weg von einer Outstation zurück zur Basis.</li>
-      <li><b>PF/PM</b> als Kästchen für zwei Stellen, rechts neben Minimum Fuel.
-          Die Schreiblinie für Minimum Fuel ist dafür auf rund 16 Zeichen gekürzt.</li>
-      <li><b>Meetingpoint Siko bei Start ab GVA:</b> zweite fette Zeit neben der
-          Crewbus-Abfahrt, gerechnet als erste STD &minus; 45 Minuten.</li>
+      <li><b>CUT-Frequenz GVA in der Kopfzeile:</b> Sobald ein Leg des Tages GVA berührt,
+          steht <b>CUT-FREQ GVA 129.705</b> neben „Daily Briefing Sheet“.</li>
+      <li><b>Ganze Rotation als ein PDF:</b> neuer Knopf unter „PDF anzeigen“, fasst alle
+          Flugtage einer zusammenhängenden Kette ohne freien Tag dazwischen zusammen.
+          Erscheint nur, wenn die Kette mehr als einen Tag umfasst.</li>
+      <li><b>Deadhead-Legs schlanker:</b> keine Flugzeit, kein Minimum Fuel, kein PF/PM und
+          keine Schengen-Angabe. Stattdessen Felder für <b>Seat</b> und <b>Gate</b>.</li>
     </ol>
     <p class="note">Es werden die fünf jüngsten Änderungen gezeigt.</p>
   </details>
@@ -140,6 +141,7 @@
 
     <button class="hidden" id="btnShare">PDF sichern / teilen</button>
     <button class="ghost hidden" id="btnOpen">PDF anzeigen</button>
+    <button class="ghost hidden" id="btnRot">Ganze Rotation anzeigen</button>
   </div>
 
   <div class="card">
@@ -392,10 +394,10 @@ function shift(t,minus){
   return String(Math.floor(x/60)).padStart(2,"0")+":"+String(x%60).padStart(2,"0");
 }
 
-function buildPDF(legs, answers){
+function buildPDF(legs, answers, into){
   const eff = resolveAll(legs, answers||[]);
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
+  const doc = into || new jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
 
   /* Sperrung zeichenweise setzen: unabhaengig von jsPDF-Optionen und
      die zurueckgegebene Breite ist exakt die gezeichnete. */
@@ -517,7 +519,14 @@ function buildPDF(legs, answers){
   /* Kopf */
   doc.setFont("courier","bold"); doc.setFontSize(15); doc.setTextColor(...INK);
   doc.text(`${DOW[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2,"0")} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`, X0, y+5.4);
-  lab(X0,y+9.2,`DAILY BRIEFING SHEET  ·  ${legs.length} LEG${legs.length>1?"S":""}`,5.8,SOFT,SP.l);
+  const subW=lab(X0,y+9.2,`DAILY BRIEFING SHEET  ·  ${legs.length} LEG${legs.length>1?"S":""}`,5.8,SOFT,SP.l);
+  /* Sobald ein Leg GVA berührt: dortige CUT-Frequenz gleich in die Kopfzeile */
+  if(legs.some(l=>l.from==="GVA"||l.to==="GVA")){
+    const cx=X0+subW+6.0;
+    const cw=lab(cx,y+9.2,"CUT-FREQ GVA",5.8,SOFT,SP.l);
+    doc.setFont("courier","bold"); doc.setFontSize(7.0); doc.setTextColor(...INK);
+    doc.text("129.705", cx+cw+1.4, y+9.2);
+  }
   doc.setFont("helvetica","normal"); doc.setFontSize(5.5);
   const swid=doc.getTextWidth("START")+SP.l*5;
   lab(X1-swid,y+2.4,"START",5.5,SOFT,SP.l);
@@ -640,8 +649,8 @@ function buildPDF(legs, answers){
           doc.setFont("helvetica","normal"); doc.setFontSize(5.8); doc.setTextColor(...SOFT);
         }
         doc.text(valTxt, X0+2.0+lw+2.5, base);
-        /* Minimum Fuel und Rolle: feste Positionen, ausserhalb des Farbfelds */
-        fuelRolleRow(base);
+        /* Minimum Fuel und PF/PM gehören zum Leg darüber – Deadhead bekommt keine */
+        if(!prev.passive) fuelRolleRow(base);
         y+=bh;
       }
     }
@@ -671,7 +680,7 @@ function buildPDF(legs, answers){
       bw=badge(X1,y+1.5,{REQ:"ASS REQ",NOTREQ:"ASS NOT REQ",DH:"DEADHEAD"}[eff[li]],eff[li]);
     }
     used=bw+2.0;
-    if(li===0){                                   /* erster Flug des Tages */
+    if(li===0 && !l.passive){                     /* erster Flug des Tages */
       const cty = APT[l.to];
       if(cty!==undefined){                        /* unbekannter Code: Feld weglassen */
         const sch = SCHENGEN.has(cty);
@@ -685,8 +694,16 @@ function buildPDF(legs, answers){
     /* Zeile A: immer – erwartete Flugzeit, Betankung mit PAX an Bord */
     const fy=y+8.4;
     let fx=X0;
-    fx+=lab(fx,fy,"EXP. FLT TIME",5.8,SOFT,SP.s)+1.4;
-    wline(fx,fy+0.3,13); fx+=13+6;
+    if(l.passive){
+      /* Deadhead: keine Flugzeit, dafür Sitzplatz und Gate */
+      fx+=lab(fx,fy,"SEAT",5.8,SOFT,SP.s)+1.4;
+      wline(fx,fy+0.3,15); fx+=15+8;
+      fx+=lab(fx,fy,"GATE",5.8,SOFT,SP.s)+1.4;
+      wline(fx,fy+0.3,15); fx+=15+6;
+    } else {
+      fx+=lab(fx,fy,"EXP. FLT TIME",5.8,SOFT,SP.s)+1.4;
+      wline(fx,fy+0.3,13); fx+=13+6;
+    }
     /* Betankung mit PAX an Bord: nur bei Landung in ZRH/GVA und Abflug ausserhalb,
        nie vorausgefüllt. Hub-zu-Hub-Legs bekommen das Feld nicht. */
     if(HUBS.includes(l.to) && !HUBS.includes(l.from) && !l.passive){
@@ -740,9 +757,11 @@ function buildPDF(legs, answers){
 
     /* Nach dem letzten Leg eine eigene Fuel-Zeile, damit jeder Flug eine hat */
     if(li===legs.length){        /* li wurde oben bereits hochgezählt */
-      const fbh=3.8, fbase=y+fbh-1.2;
-      fuelRolleRow(fbase);
-      y+=fbh;
+      if(!l.passive){
+        const fbh=3.8, fbase=y+fbh-1.2;
+        fuelRolleRow(fbase);
+        y+=fbh;
+      }
     }
   }
   doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(X0,y,X1,y);
@@ -852,6 +871,20 @@ function renderDays(){
 }
 
 
+/* Zusammenhängende Kette: Flugtage an aufeinanderfolgenden Kalendertagen */
+function dayNum(d){ return Math.floor(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())/86400000); }
+function chainOf(i){
+  const out=[i];
+  while(out[0]>0 && dayNum(duties[out[0]-1][0].stdLocal)===dayNum(duties[out[0]][0].stdLocal)-1)
+    out.unshift(out[0]-1);
+  let last=out[out.length-1];
+  while(last<duties.length-1 && dayNum(duties[last+1][0].stdLocal)===dayNum(duties[last][0].stdLocal)+1)
+    out.push(++last);
+  return out;
+}
+/* Für nicht gewählte Tage die abgeleiteten Vorschläge übernehmen */
+function defaultAnswers(duty){ return duty.filter(l=>l.ass==="OPEN").map(l=>l.guess||""); }
+
 function openLegs(){ return duties.length ? duties[sel].filter(l=>l.ass==="OPEN") : []; }
 
 function renderInbound(){
@@ -886,6 +919,9 @@ function makePDF(){
     lastUrl=URL.createObjectURL(lastBlob);
     $("btnShare").classList.remove("hidden");
     $("btnOpen").classList.remove("hidden");
+    const chain=chainOf(sel);
+    $("btnRot").classList.toggle("hidden", chain.length<2);
+    $("btnRot").textContent=`Ganze Rotation anzeigen (${chain.length} Tage)`;
     say("PDF für "+lastName.slice(9,19)+" bereit · Roster-Stand "+stamp
         +(warnCut?" · ACHTUNG: Roster kam unvollständig an, spätere Flugtage können fehlen.":"")
         +(warnPast?" · ACHTUNG: Der Roster enthält nur vergangene Flugtage.":""),
@@ -893,6 +929,27 @@ function makePDF(){
   }catch(e){ say("PDF fehlgeschlagen: "+e.message,"err"); }
 }
 $("btnOpen").onclick=()=>{ if(lastUrl) window.open(lastUrl,"_blank"); };
+
+/* Alle Flugtage einer zusammenhängenden Kette in ein PDF */
+$("btnRot").onclick=()=>{
+  if(!duties.length) return;
+  try{
+    const chain=chainOf(sel);
+    const { jsPDF } = window.jspdf;
+    let doc=null;
+    for(const i of chain){
+      if(!doc) doc=new jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
+      else doc.addPage("a4","landscape");
+      buildPDF(duties[i], i===sel ? answers() : defaultAnswers(duties[i]), doc);
+    }
+    const from=dayKey(duties[chain[0]][0].stdLocal);
+    const to=dayKey(duties[chain[chain.length-1]][0].stdLocal);
+    const blob=doc.output("blob");
+    const url=URL.createObjectURL(blob);
+    window.open(url,"_blank");
+    say(`Rotation ${from} bis ${to} · ${chain.length} Seiten`,"ok");
+  }catch(e){ say("Rotation fehlgeschlagen: "+e.message,"err"); }
+};
 
 $("btnShare").onclick=async()=>{
   if(!lastBlob) return;
