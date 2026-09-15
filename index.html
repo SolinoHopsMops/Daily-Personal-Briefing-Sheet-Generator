@@ -93,13 +93,13 @@
       <li><b>Crew Call / Pick-up Times</b> neben dem Titel Cabin Briefing – nur an Tagen,
           an denen die Rotation ausserhalb von ZRH/GVA endet. Die Klammer mit den
           Stichworten im Titel ist entfallen.</li>
+      <li><b>Hinweise am rechten Rand des Cabin Briefing:</b> in Rot, wenn das erste Leg in
+          ein Non-Schengen-Ziel führt oder an einer Station ASS erforderlich ist – dann mit
+          Ortsangabe, z.B. <b>ASS IN LGW REQUIRED</b>.</li>
+      <li><b>CUT-FREQ nach Nightstop:</b> Beginnt der Tag ausserhalb von ZRH/GVA, hat auch
+          das erste Leg ein Feld für die Frequenz am Abflugort.</li>
       <li><b>CUT-Frequenz GVA in der Kopfzeile:</b> Sobald ein Leg des Tages GVA berührt,
           steht <b>CUT-FREQ GVA 129.705</b> neben „Daily Briefing Sheet“.</li>
-      <li><b>Ganze Rotation als ein PDF:</b> neuer Knopf unter „PDF anzeigen“, fasst alle
-          Flugtage einer zusammenhängenden Kette ohne freien Tag dazwischen zusammen.
-          Erscheint nur, wenn die Kette mehr als einen Tag umfasst.</li>
-      <li><b>Deadhead-Legs schlanker:</b> keine Flugzeit, kein Minimum Fuel, kein PF/PM und
-          keine Schengen-Angabe. Stattdessen Felder für <b>Seat</b> und <b>Gate</b>.</li>
     </ol>
     <p class="note">Es werden die fünf jüngsten Änderungen gezeigt.</p>
   </details>
@@ -470,17 +470,26 @@ function buildPDF(legs, answers, into){
     }
     return x-2.2;
   };
-  const rbox=(x,yTop,w,h,title,extra)=>{
+  const rbox=(x,yTop,w,h,title,extra,notes)=>{
     doc.setLineWidth(0.317); doc.setDrawColor(...INK); doc.rect(x,yTop,w,h,"S");
-    const head = extra ? 6.5 : 4.4;      /* mit Zusatzfeld höhere Kopfleiste */
+    const baseHead = extra ? 6.5 : 4.4;  /* mit Zusatzfeld höhere Kopfleiste */
+    const head = baseHead + (notes && notes.length ? 3.6 : 0);
     doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(x,yTop+head,x+w,yTop+head);
-    const base = yTop+head-2.0;
+    const base = yTop+baseHead-2.0;      /* Titel bleibt oben, Hinweise darunter */
     lab(x+1.6,base,title,6.0,INK,SP.m);
     if(extra){
       const ex = x+40.0;                 /* feste Spalte, damit es nicht wandert */
       const ew = lab(ex,base,extra,6.0,SOFT,SP.m);
       doc.setLineWidth(0.176); doc.setDrawColor(...SOFT);
       doc.line(ex+ew+1.4, base+0.6, x+w-1.6, base+0.6);
+    }
+    if(notes && notes.length){
+      /* Hinweise rechtsbündig auf eigener Zeile, damit sie nie kollidieren */
+      const ny = yTop + head - 1.6;
+      const txt = notes.join("   ·   ");
+      doc.setFont("helvetica","normal"); doc.setFontSize(6.0);
+      const tw = doc.getTextWidth(txt) + SP.m*txt.length;
+      lab(x+w-1.6-tw, ny, txt, 6.0, RED, SP.m);
     }
     doc.setLineWidth(0.141); doc.setDrawColor(...HAIR);
     for(let yy=yTop+head+6; yy<yTop+h-2.5; yy+=6) doc.line(x+1.6,yy,x+w-1.6,yy);
@@ -618,6 +627,7 @@ function buildPDF(legs, answers, into){
 
   let li=0;
   for(const l of legs){
+    const idx=li;                 /* li wird weiter unten hochgezählt */
     /* NADP hängt am Abflugort, die Turnaround-Felder am Zielort */
     const needNadp = !HUBS.includes(l.from) && !l.passive;
     const needArr  = !HUBS.includes(l.to)   && !l.passive;
@@ -712,8 +722,10 @@ function buildPDF(legs, answers, into){
       fx=cbox(fx,fy-2.1,"N",2.9)+1.0;
       fx=cbox(fx,fy-2.1,"SPEC. COND.",2.9);
     }
-    /* CUT-Frequenz: nur bei Landung ausserhalb ZRH/GVA */
-    if(needArr){
+    /* CUT-Frequenz: bei Landung ausserhalb ZRH/GVA – und nach einem Nightstop
+       ausserhalb auch auf dem ersten Leg, für die Freigabe am Abflugort */
+    const exNightstop = idx===0 && !HUBS.includes(l.from) && !l.passive;
+    if(needArr || exNightstop){
       fx+=lab(fx,fy,"CUT-FREQ",5.8,SOFT,SP.s)+1.4;
       wline(fx,fy+0.3,15.0);
     }
@@ -773,7 +785,17 @@ function buildPDF(legs, answers, into){
   const hRem=avail*0.75;          /* Remarks darunter, drei Viertel   */
   /* Zusatzfeld nur, wenn die Rotation ausserhalb ZRH/GVA endet */
   const layover = !HUBS.includes(legs[legs.length-1].to);
-  rbox(X0,y,CW,hCab,"CABIN BRIEFING", layover ? "CREW CALL / PICK-UP TIMES" : null);
+
+  /* Hinweise am rechten Rand: Non-Schengen auf dem ersten Leg, ASS-Pflicht mit Ort */
+  const notes=[];
+  if(!legs[0].passive){
+    const cty0 = APT[legs[0].to];
+    if(cty0!==undefined && !SCHENGEN.has(cty0)) notes.push(`1. LEG NACH ${legs[0].to} NON-SCHENGEN`);
+  }
+  const assSt=[...new Set(legs.filter((l,i)=>eff[i]==="REQ").map(l=>l.from))];
+  if(assSt.length) notes.push(`ASS IN ${assSt.join(" / ")} REQUIRED`);
+
+  rbox(X0,y,CW,hCab,"CABIN BRIEFING", layover ? "CREW CALL / PICK-UP TIMES" : null, notes);
   y+=hCab+2.6;
   rbox(X0,y,CW,hRem,"REMARKS");
 
