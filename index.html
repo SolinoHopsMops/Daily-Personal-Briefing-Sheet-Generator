@@ -94,8 +94,10 @@
           an denen die Rotation ausserhalb von ZRH/GVA endet. Die Klammer mit den
           Stichworten im Titel ist entfallen.</li>
       <li><b>Hinweise am rechten Rand des Cabin Briefing:</b> in Rot, wenn das erste Leg in
-          ein Non-Schengen-Ziel führt oder an einer Station ASS erforderlich ist – dann mit
-          Ortsangabe, z.B. <b>ASS IN LGW REQUIRED</b>.</li>
+          ein Non-Schengen-Ziel führt oder an einer Station ASS erforderlich ist –
+          <b>1. LEG N-SCH LGW · ASS REQ LGW</b>. Sie teilen sich die Titelzeile und kosten
+          keine zusätzliche Höhe; nur wenn gleichzeitig das Crew-Call-Feld da ist, rücken
+          sie in eine zweite Zeile.</li>
       <li><b>CUT-FREQ nach Nightstop:</b> Beginnt der Tag ausserhalb von ZRH/GVA, hat auch
           das erste Leg ein Feld für die Frequenz am Abflugort.</li>
       <li><b>CUT-Frequenz GVA in der Kopfzeile:</b> Sobald ein Leg des Tages GVA berührt,
@@ -472,24 +474,30 @@ function buildPDF(legs, answers, into){
   };
   const rbox=(x,yTop,w,h,title,extra,notes)=>{
     doc.setLineWidth(0.317); doc.setDrawColor(...INK); doc.rect(x,yTop,w,h,"S");
-    const baseHead = extra ? 6.5 : 4.4;  /* mit Zusatzfeld höhere Kopfleiste */
-    const head = baseHead + (notes && notes.length ? 3.6 : 0);
+    /* Titel, Zusatzfeld und Hinweise teilen sich eine Zeile. Nur wenn beide
+       zusammentreffen, bekommen die Hinweise eine zweite Zeile – sonst bliebe
+       für die Schreiblinie zu wenig übrig. */
+    const hasNotes = !!(notes && notes.length);
+    const twoRows = extra && hasNotes;
+    const head = (extra ? 6.5 : 4.4) + (twoRows ? 3.6 : 0);
     doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(x,yTop+head,x+w,yTop+head);
-    const base = yTop+baseHead-2.0;      /* Titel bleibt oben, Hinweise darunter */
+    const base = yTop + (extra ? 6.5 : 4.4) - 2.0;
     lab(x+1.6,base,title,6.0,INK,SP.m);
+
+    /* Hinweise rechtsbündig; was übrig bleibt, gehört dem Zusatzfeld */
+    let rightEdge = x+w-1.6;
+    if(hasNotes){
+      const txt = notes.join("   ·   ");
+      doc.setFont("helvetica","normal"); doc.setFontSize(6.0);
+      const tw = doc.getTextWidth(txt) + SP.m*txt.length;
+      lab(rightEdge-tw, base + (twoRows ? 3.6 : 0), txt, 6.0, RED, SP.m);
+      if(!twoRows) rightEdge -= tw + 4.0;
+    }
     if(extra){
       const ex = x+40.0;                 /* feste Spalte, damit es nicht wandert */
       const ew = lab(ex,base,extra,6.0,SOFT,SP.m);
       doc.setLineWidth(0.176); doc.setDrawColor(...SOFT);
-      doc.line(ex+ew+1.4, base+0.6, x+w-1.6, base+0.6);
-    }
-    if(notes && notes.length){
-      /* Hinweise rechtsbündig auf eigener Zeile, damit sie nie kollidieren */
-      const ny = yTop + head - 1.6;
-      const txt = notes.join("   ·   ");
-      doc.setFont("helvetica","normal"); doc.setFontSize(6.0);
-      const tw = doc.getTextWidth(txt) + SP.m*txt.length;
-      lab(x+w-1.6-tw, ny, txt, 6.0, RED, SP.m);
+      doc.line(ex+ew+1.4, base+0.6, rightEdge, base+0.6);
     }
     doc.setLineWidth(0.141); doc.setDrawColor(...HAIR);
     for(let yy=yTop+head+6; yy<yTop+h-2.5; yy+=6) doc.line(x+1.6,yy,x+w-1.6,yy);
@@ -790,10 +798,10 @@ function buildPDF(legs, answers, into){
   const notes=[];
   if(!legs[0].passive){
     const cty0 = APT[legs[0].to];
-    if(cty0!==undefined && !SCHENGEN.has(cty0)) notes.push(`1. LEG NACH ${legs[0].to} NON-SCHENGEN`);
+    if(cty0!==undefined && !SCHENGEN.has(cty0)) notes.push(`1. LEG N-SCH ${legs[0].to}`);
   }
   const assSt=[...new Set(legs.filter((l,i)=>eff[i]==="REQ").map(l=>l.from))];
-  if(assSt.length) notes.push(`ASS IN ${assSt.join(" / ")} REQUIRED`);
+  if(assSt.length) notes.push(`ASS REQ ${assSt.join(" / ")}`);
 
   rbox(X0,y,CW,hCab,"CABIN BRIEFING", layover ? "CREW CALL / PICK-UP TIMES" : null, notes);
   y+=hCab+2.6;
