@@ -93,6 +93,9 @@
       <li><b>Crew Call / Pick-up Times</b> neben dem Titel Cabin Briefing – nur an Tagen,
           an denen die Rotation ausserhalb von ZRH/GVA endet. Die Klammer mit den
           Stichworten im Titel ist entfallen.</li>
+      <li><b>Endet der Einsatz nicht in Zürich</b>, heisst das Feld neben der Crewbus-Zeit
+          <b>Pick-up Time Tomorrow</b>. Bei GVA-Bezug steht ausserdem <b>Door Code 4432</b>
+          neben der CUT-Frequenz in der Kopfzeile.</li>
       <li><b>A/C REG(s)</b> neu in der Schnellfeldreihe. <b>Slot / ETD</b> ist dafür halbiert
           und der Titel gekürzt, <b>Crew Bags</b> auf eine Stelle verkleinert.</li>
       <li><b>Hinweise am rechten Rand des Cabin Briefing:</b> in Rot, wenn das erste Leg in
@@ -100,8 +103,6 @@
           <b>1. LEG N-SCH LGW · ASS REQ LGW</b>. Sie teilen sich die Titelzeile und kosten
           keine zusätzliche Höhe; nur wenn gleichzeitig das Crew-Call-Feld da ist, rücken
           sie in eine zweite Zeile.</li>
-      <li><b>CUT-FREQ nach Nightstop:</b> Beginnt der Tag ausserhalb von ZRH/GVA, hat auch
-          das erste Leg ein Feld für die Frequenz am Abflugort.</li>
     </ol>
     <p class="note">Es werden die fünf jüngsten Änderungen gezeigt.</p>
   </details>
@@ -542,7 +543,12 @@ function buildPDF(legs, answers, into){
     const cx=X0+subW+6.0;
     const cw=lab(cx,y+9.2,"CUT-FREQ GVA",5.8,SOFT,SP.l);
     doc.setFont("courier","bold"); doc.setFontSize(7.0); doc.setTextColor(...INK);
-    doc.text("129.705", cx+cw+1.4, y+9.2);
+    const fq="129.705";
+    doc.text(fq, cx+cw+1.4, y+9.2);
+    const dx=cx+cw+1.4+doc.getTextWidth(fq)+6.0;
+    const dw=lab(dx,y+9.2,"DOOR CODE",5.8,SOFT,SP.l);
+    doc.setFont("courier","bold"); doc.setFontSize(7.0); doc.setTextColor(...INK);
+    doc.text("4432", dx+dw+1.4, y+9.2);
   }
   doc.setFont("helvetica","normal"); doc.setFontSize(5.5);
   const swid=doc.getTextWidth("START")+SP.l*5;
@@ -597,8 +603,10 @@ function buildPDF(legs, answers, into){
     divider(x2+64.0);
     sx=x2+66.5;
   } else sx=x2+34.5;
-  lab(sx,y+3.6,"EVTL. VEREINBARTE",5.5,SOFT,0.123);
-  lab(sx,y+6.2,"CREWBUS ZEIT",5.5,SOFT,0.123);
+  /* Endet der Einsatz nicht in Zürich, wird morgen abgeholt statt gefahren */
+  const endsZRH = legs[legs.length-1].to==="ZRH";
+  lab(sx,y+3.6, endsZRH?"EVTL. VEREINBARTE":"PICK-UP TIME", 5.5,SOFT,0.123);
+  lab(sx,y+6.2, endsZRH?"CREWBUS ZEIT":"TOMORROW",          5.5,SOFT,0.123);
   wline(sx,y+11.4,x2+cw2-2.0-sx);
   y+=ch+2.6;
   }
