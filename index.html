@@ -93,8 +93,8 @@
       <li><b>Crew Call / Pick-up Times</b> neben dem Titel Cabin Briefing – nur an Tagen,
           an denen die Rotation ausserhalb von ZRH/GVA endet. Die Klammer mit den
           Stichworten im Titel ist entfallen.</li>
-      <li><b>Ziel GVA:</b> Unter der Flugzeit steht <b>APU recommended for stands:
-          88, 121, 123, 125, 127</b>, in der Spalte von Minimum Fuel.</li>
+      <li><b>Ziel GVA:</b> Kurzhinweis <b>APU: 88, 121, 123, 125, 127</b>, eingefügt in den
+          freien Rest der bestehenden Feldzeile – ohne zusätzliche Höhe.</li>
       <li><b>Endet der Einsatz nicht in Zürich</b>, heisst das Feld neben der Crewbus-Zeit
           <b>Pick-up Time Tomorrow</b>. Bei GVA-Bezug steht ausserdem <b>Door Code 4432</b>
           neben der CUT-Frequenz in der Kopfzeile.</li>
@@ -189,6 +189,7 @@ const CREWBUS_SCHEDULE = { GVA:[10,30,50] };
 const MEETING_OFFSET = { GVA:45 };   /* Meetingpoint Siko, min vor STD */
 const DH_CREWBUS_OFFSET = 25;
 const PASSIVE_CODES = ["DH","PAX","TR"];
+const APU_GVA = "APU: 88, 121, 123, 125, 127";   /* Stände mit APU-Empfehlung in Genf */
 const TURN_RED = 45;                // Bodenzeit unter 45 min -> rot
 const TURN_ORANGE = 50;             // Bodenzeit unter 50 min -> orange
 /* ZRH Peak Times (LT), Start und Ende einschliesslich */
@@ -646,7 +647,7 @@ function buildPDF(legs, answers, into){
     const needNadp = !HUBS.includes(l.from) && !l.passive;
     const needArr  = !HUBS.includes(l.to)   && !l.passive;
     const apuNote  = l.to==="GVA" && !l.passive;   /* Standhinweis für Genf */
-    const lh = (needNadp || needArr || apuNote) ? 13.8 : 9.8;
+    const lh = (needNadp || needArr) ? 13.8 : 9.8;
 
     /* Bodenzeit zwischen zwei Flügen am selben Platz */
     if(li>0){
@@ -764,7 +765,7 @@ function buildPDF(legs, answers, into){
     if(needNadp) fields.push(["NADP",["1","2"]]);
     if(needArr)  fields.push(["APU",["Y","N"]],["MAINT",["Y","N"]],
                              ["REVERSE",["Y","N"]],["FDDC",["Y","N"]]);
-    if(fields.length || apuNote){
+    if(fields.length){
       const fy2=y+12.2;
       fx=X0;
       for(const [name,o] of fields){
@@ -773,16 +774,18 @@ function buildPDF(legs, answers, into){
         fx=cbox(fx,fy2-2.1,o[1],2.9)+2.8;
       }
       /* A-CDM-Status des Abflugorts (ZRH/GVA ausgenommen) */
-      /* Genf: Stände, an denen die APU empfohlen ist – in der Spalte von Minimum Fuel */
-      if(apuNote) lab(X0+54.0, fy2, "APU RECOMMENDED FOR STANDS: 88, 121, 123, 125, 127",
-                      5.8, SOFT, SP.s);
-
       /* Nur belegte Fälle kennzeichnen – keine Aussage über die übrigen */
       if(needNadp && CDM_AIRPORTS.has(l.from)){
         doc.setFont("courier","bold"); doc.setFontSize(6.6);
         const cw_=doc.getTextWidth("A-CDM")+2.8;
         badge(fx+1.2+cw_, fy2-3.9+1.15, "A-CDM", "CDM");
+        fx += 1.2 + cw_ + 4.0;
       }
+      /* Genf: APU-Empfehlung in den freien Rest der zweiten Feldzeile */
+      if(apuNote) lab(fx, fy2, APU_GVA, 5.8, SOFT, SP.s);
+    } else if(apuNote){
+      /* Ohne zweite Feldzeile hinter die Flugzeit in Zeile A */
+      lab(fx, fy, APU_GVA, 5.8, SOFT, SP.s);
     }
     y+=lh;
 
