@@ -55,6 +55,11 @@
   code{font-family:var(--mono);font-size:12px;background:var(--bg);padding:2px 5px;border-radius:4px;
        word-break:break-all}
   .note{font-size:12px;color:var(--soft);margin-top:10px}
+  .sw{display:flex;align-items:center;gap:10px;margin:14px 0 4px;padding:11px 12px;
+      border:1px solid var(--line);border-radius:10px;font-size:14px;font-weight:600;
+      cursor:pointer;flex-wrap:wrap}
+  .sw input{width:20px;height:20px;accent-color:var(--accent);margin:0}
+  .sw small{flex-basis:100%;font-weight:400;font-size:11.5px;color:var(--soft)}
   .inbound{margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
   .inbound h3{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);
               margin:0 0 10px;font-weight:600;line-height:1.5}
@@ -93,13 +98,15 @@
       <li><b>Crew Call / Pick-up Times</b> neben dem Titel Cabin Briefing – nur an Tagen,
           an denen die Rotation ausserhalb von ZRH/GVA endet. Die Klammer mit den
           Stichworten im Titel ist entfallen.</li>
+      <li><b>Neuer Schalter „AOI essentials“:</b> Ist er aktiv, wird das Remarks-Feld in
+          eine Spalte je Leg geteilt – benannt nach Station und ARR/DEP – und aus der
+          hinterlegten Datenbank gefüllt. Stationen ohne Eintrag bekommen eine leere Spalte
+          zum Selbstausfüllen. Erste Station: BCN.</li>
       <li><b>Ziel GVA:</b> Kurzhinweis <b>APU: 88, 121, 123, 125, 127</b>, eingefügt in den
           freien Rest der bestehenden Feldzeile – ohne zusätzliche Höhe.</li>
       <li><b>Endet der Einsatz nicht in Zürich</b>, heisst das Feld neben der Crewbus-Zeit
           <b>Pick-up Time Tomorrow</b>. Bei GVA-Bezug steht ausserdem <b>Door Code 4432</b>
           neben der CUT-Frequenz in der Kopfzeile.</li>
-      <li><b>A/C REG(s)</b> neu in der Schnellfeldreihe. <b>Slot / ETD</b> ist dafür halbiert
-          und der Titel gekürzt, <b>Crew Bags</b> auf eine Stelle verkleinert.</li>
     </ol>
     <p class="note">Es werden die fünf jüngsten Änderungen gezeigt.</p>
   </details>
@@ -138,6 +145,9 @@
       <p class="note">IATA-Code der Vorstation eintragen, dann wird ASS berechnet.
          Feld leer lassen, wenn unbekannt – dann erscheint auf dem Blatt ein Feld zum Ankreuzen.</p>
     </div>
+
+    <label class="sw"><input type="checkbox" id="aoi"> AOI essentials
+      <small>Stationsdetails als Spalten im Remarks-Feld</small></label>
 
     <button class="hidden" id="btnShare">PDF sichern / teilen</button>
     <button class="ghost hidden" id="btnOpen">PDF anzeigen</button>
@@ -189,6 +199,36 @@ const CREWBUS_SCHEDULE = { GVA:[10,30,50] };
 const MEETING_OFFSET = { GVA:45 };   /* Meetingpoint Siko, min vor STD */
 const DH_CREWBUS_OFFSET = 25;
 const PASSIVE_CODES = ["DH","PAX","TR"];
+/* =====================================================================
+   AOI ESSENTIALS – Stationsdetails. Hier fortlaufend ergänzen.
+   Schema:  CODE: { ARR: [ "...", ... ], DEP: [ "...", ... ] }
+   ===================================================================== */
+const AOI = {
+  BCN: {
+    ARR: ["APCH: callsign only",
+          "No EAT when < 10 min. delay",
+          "Tight separation",
+          "Pref. LDG 24R to vacate R5",
+          "160 til 4",
+          "Terminal 1, stands 216-288",
+          "TRPDR STBY",
+          "APU 2 min. after on-block (strict fines)"],
+    DEP: ["Pref. TKOF 24L",
+          "CLRNCE TOBT -30 min.",
+          "APU 6 min. before",
+          "TRPDR AUTO",
+          "Autoswitch active: 2000 ft -> BCN APP"]
+  }
+};
+/* Eine Spalte je Leg: Ziel ausserhalb der Basis -> ARR, sonst Abflugort -> DEP */
+function aoiColumns(legs){
+  return legs.map(l=>{
+    if(!HUBS.includes(l.to))   return {title:`${l.to} ARR`, items:((AOI[l.to]||{}).ARR)||[]};
+    if(!HUBS.includes(l.from)) return {title:`${l.from} DEP`, items:((AOI[l.from]||{}).DEP)||[]};
+    return {title:`${l.from}-${l.to}`, items:[]};
+  });
+}
+
 const APU_GVA = "APU: 88, 121, 123, 125, 127";   /* Stände mit APU-Empfehlung in Genf */
 const TURN_RED = 45;                // Bodenzeit unter 45 min -> rot
 const TURN_ORANGE = 50;             // Bodenzeit unter 50 min -> orange
@@ -395,7 +435,7 @@ function shift(t,minus){
   return String(Math.floor(x/60)).padStart(2,"0")+":"+String(x%60).padStart(2,"0");
 }
 
-function buildPDF(legs, answers, into){
+function buildPDF(legs, answers, into, aoi){
   const eff = resolveAll(legs, answers||[]);
   const { jsPDF } = window.jspdf;
   const doc = into || new jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
@@ -471,6 +511,41 @@ function buildPDF(legs, answers, into){
     }
     return x-2.2;
   };
+  /* Remarks mit einer Spalte je Leg, gefüllt aus der AOI-Datenbank */
+  const colBox=(x,yTop,w,h,cols)=>{
+    doc.setLineWidth(0.317); doc.setDrawColor(...INK); doc.rect(x,yTop,w,h,"S");
+    const head=4.4;
+    doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(x,yTop+head,x+w,yTop+head);
+    lab(x+1.6,yTop+head-2.0,"REMARKS  ·  AOI ESSENTIALS",6.0,INK,SP.m);
+    const n=Math.max(cols.length,1), cw=w/n;
+    const wrap=(t,maxW)=>{
+      doc.setFont("helvetica","normal"); doc.setFontSize(5.2);
+      const out=[]; let line="";
+      for(const word of t.split(" ")){
+        const probe = line ? line+" "+word : word;
+        if(doc.getTextWidth(probe)>maxW && line){ out.push(line); line=word; }
+        else line=probe;
+      }
+      if(line) out.push(line);
+      return out;
+    };
+    for(let i=0;i<n;i++){
+      const cx=x+i*cw;
+      if(i){ doc.setDrawColor(...RULE); doc.setLineWidth(0.141); doc.line(cx,yTop+head,cx,yTop+h); }
+      lab(cx+1.6,yTop+head+3.4,cols[i].title,5.8,INK,SP.s);
+      let yy=yTop+head+7.0;
+      for(const it of cols[i].items){
+        const lines=wrap(it, cw-5.4);
+        lines.forEach((ln,k)=>{
+          if(yy>yTop+h-1.4) return;
+          if(k===0) lab(cx+1.6,yy,"-",5.2,SOFT,0.04);
+          lab(cx+3.4,yy,ln,5.2,SOFT,0.04);   /* Folgezeilen eingerückt */
+          yy+=2.4;
+        });
+      }
+    }
+  };
+
   const rbox=(x,yTop,w,h,title,extra,notes)=>{
     doc.setLineWidth(0.317); doc.setDrawColor(...INK); doc.rect(x,yTop,w,h,"S");
     /* Titel, Zusatzfeld und Hinweise teilen sich eine Zeile. Nur wenn beide
@@ -819,7 +894,8 @@ function buildPDF(legs, answers, into){
 
   rbox(X0,y,CW,hCab,"CABIN BRIEFING", layover ? "CREW CALL / PICK-UP TIMES" : null, notes);
   y+=hCab+2.6;
-  rbox(X0,y,CW,hRem,"REMARKS");
+  if(aoi) colBox(X0,y,CW,hRem,aoiColumns(legs));
+  else    rbox(X0,y,CW,hRem,"REMARKS");
 
   /* Fuss */
   lab(X0,BOTY,"ASS gem. OM A Appendix / OM A 10.3.1  ·  Abflug ZRH/GVA: Vorflug des A/C aus dem LX-Netz angenommen",5.2,SOFT,SP.xs);
@@ -956,7 +1032,7 @@ function answers(){
 function makePDF(){
   if(!duties.length) return;
   try{
-    const doc=buildPDF(duties[sel], answers());
+    const doc=buildPDF(duties[sel], answers(), undefined, $("aoi").checked);
     lastName="Briefing_"+dayKey(duties[sel][0].stdLocal)+".pdf";
     lastBlob=doc.output("blob");
     if(lastUrl) try{ URL.revokeObjectURL(lastUrl); }catch(e){}
@@ -972,6 +1048,7 @@ function makePDF(){
         (warnCut||warnPast)?"err":"ok");
   }catch(e){ say("PDF fehlgeschlagen: "+e.message,"err"); }
 }
+$("aoi").onchange=()=>{ store("aoi", $("aoi").checked?"1":"0"); makePDF(); };
 $("btnOpen").onclick=()=>{ if(lastUrl) window.open(lastUrl,"_blank"); };
 
 /* Alle Flugtage einer zusammenhängenden Kette in ein PDF */
@@ -984,7 +1061,7 @@ $("btnRot").onclick=()=>{
     for(const i of chain){
       if(!doc) doc=new jsPDF({orientation:"landscape", unit:"mm", format:"a4"});
       else doc.addPage("a4","landscape");
-      buildPDF(duties[i], i===sel ? answers() : defaultAnswers(duties[i]), doc);
+      buildPDF(duties[i], i===sel ? answers() : defaultAnswers(duties[i]), doc, $("aoi").checked);
     }
     const from=dayKey(duties[chain[0]][0].stdLocal);
     const to=dayKey(duties[chain[chain.length-1]][0].stdLocal);
@@ -1053,6 +1130,7 @@ $("btnFetch").onclick=()=>{
 /* Start: Roster aus der Adresse (Kurzbefehl), sonst Cache / Direktabruf */
 (function(){
   const u=load("url"); if(u) $("url").value=u;
+  $("aoi").checked = load("aoi")==="1";
 
   const m=(location.hash||"").match(/[#&]ics=([\s\S]+)$/);
   if(m){
