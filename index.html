@@ -100,8 +100,9 @@
           Stichworten im Titel ist entfallen.</li>
       <li><b>Neuer Schalter „AOI essentials“:</b> Ist er aktiv, wird das Remarks-Feld in
           eine Spalte je Leg geteilt – benannt nach Station und ARR/DEP – und aus der
-          hinterlegten Datenbank gefüllt. Stationen ohne Eintrag bekommen eine leere Spalte
-          zum Selbstausfüllen. Erste Station: BCN.</li>
+          hinterlegten Datenbank gefüllt. Nur Outstations bekommen eine Spalte, reine
+          ZRH/GVA-Legs nicht. Stationen ohne Eintrag bleiben leer zum Selbstausfüllen.
+          Hinterlegt: BCN, LHR, FRA.</li>
       <li><b>Ziel GVA:</b> Kurzhinweis <b>APU: 88, 121, 123, 125, 127</b>, eingefügt in den
           freien Rest der bestehenden Feldzeile – ohne zusätzliche Höhe.</li>
       <li><b>Endet der Einsatz nicht in Zürich</b>, heisst das Feld neben der Crewbus-Zeit
@@ -218,15 +219,44 @@ const AOI = {
           "APU 6 min. before",
           "TRPDR AUTO",
           "Autoswitch active: 2000 ft -> BCN APP"]
+  },
+  LHR: {
+    ARR: ["PDF RWY Concept",
+          "121.605 Heathrow Fire Brigade",
+          "No A/C type on first contact APCH",
+          "TWR: NM, APCH, RWY",
+          "Speeds: 220 HLD-Int, 180 base, 160 til 4",
+          "TRPDR STBY"],
+    DEP: ["Clearance EOBT -25 min.",
+          "APU 15 min.",
+          "TRPDR AUTO"]
+  },
+  FRA: {
+    ARR: ["Frankfurt Rescue 121.555",
+          "ARR: call sign only",
+          "TWR: APCH type, RWY",
+          "Pref. turn-offs: 07C L11, 07R M15, 25L M17, 25C L10, 25R P16",
+          "When contacting Apron state actual position",
+          "No SETI: V143, V144, A1, B10, C2",
+          "Stop while turning to parking: contact Apron before increasing PWR",
+          "TRPDR STBY",
+          "APU latest OFF after deboarding"],
+    DEP: ["Request en-route clearance (or start-up as well)",
+          "Clearance TOBT -30 min.",
+          "APU 5 min. before",
+          "Monitor DLV from TOBT -5",
+          "TRPDR AUTO"]
   }
 };
-/* Eine Spalte je Leg: Ziel ausserhalb der Basis -> ARR, sonst Abflugort -> DEP */
+/* Spalten nur für Outstations: Ziel ausserhalb der Basis -> ARR,
+   Abflug ausserhalb der Basis -> DEP. Reine Basis-Legs bekommen keine. */
 function aoiColumns(legs){
-  return legs.map(l=>{
-    if(!HUBS.includes(l.to))   return {title:`${l.to} ARR`, items:((AOI[l.to]||{}).ARR)||[]};
-    if(!HUBS.includes(l.from)) return {title:`${l.from} DEP`, items:((AOI[l.from]||{}).DEP)||[]};
-    return {title:`${l.from}-${l.to}`, items:[]};
-  });
+  const out=[];
+  for(const l of legs){
+    if(!HUBS.includes(l.to))        out.push({title:`${l.to} ARR`,   items:((AOI[l.to]||{}).ARR)||[]});
+    else if(!HUBS.includes(l.from)) out.push({title:`${l.from} DEP`, items:((AOI[l.from]||{}).DEP)||[]});
+  }
+  return out;
 }
 
 const APU_GVA = "APU: 88, 121, 123, 125, 127";   /* Stände mit APU-Empfehlung in Genf */
@@ -894,8 +924,9 @@ function buildPDF(legs, answers, into, aoi){
 
   rbox(X0,y,CW,hCab,"CABIN BRIEFING", layover ? "CREW CALL / PICK-UP TIMES" : null, notes);
   y+=hCab+2.6;
-  if(aoi) colBox(X0,y,CW,hRem,aoiColumns(legs));
-  else    rbox(X0,y,CW,hRem,"REMARKS");
+  const aoiCols = aoi ? aoiColumns(legs) : [];
+  if(aoiCols.length) colBox(X0,y,CW,hRem,aoiCols);
+  else               rbox(X0,y,CW,hRem,"REMARKS");
 
   /* Fuss */
   lab(X0,BOTY,"ASS gem. OM A Appendix / OM A 10.3.1  ·  Abflug ZRH/GVA: Vorflug des A/C aus dem LX-Netz angenommen",5.2,SOFT,SP.xs);
