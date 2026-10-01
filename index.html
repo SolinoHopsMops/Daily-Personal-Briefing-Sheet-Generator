@@ -104,7 +104,8 @@
           ZRH/GVA-Legs nicht. Stationen ohne Eintrag bleiben leer zum Selbstausfüllen.
           Hinterlegt: BCN, LHR, FRA, AMS, HAM. Jeder Eintrag trägt ein Prüfdatum; ist es älter
           als sechs Monate, erscheint in der Spalte rot <b>Last AOI Check &gt; 6 months ago</b>.
-          Der Schriftgrad passt sich automatisch an, damit lange Listen nie abgeschnitten werden.</li>
+          Der Schriftgrad passt sich automatisch an, damit lange Listen nie abgeschnitten werden.
+          Wird eine Station am selben Tag zweimal angeflogen, stehen ihre Details nur einmal.</li>
       <li><b>Ziel GVA:</b> Kurzhinweis <b>APU: 88, 121, 123, 125, 127</b>, eingefügt in den
           freien Rest der bestehenden Feldzeile – ohne zusätzliche Höhe.</li>
       <li><b>Endet der Einsatz nicht in Zürich</b>, heisst das Feld neben der Crewbus-Zeit
@@ -301,12 +302,21 @@ function aoiStale(code){
 /* Spalten nur für Outstations: Ziel ausserhalb der Basis -> ARR,
    Abflug ausserhalb der Basis -> DEP. Reine Basis-Legs bekommen keine. */
 function aoiColumns(legs){
-  const out=[];
+  const out=[], seen=new Set();
   for(const l of legs){
+    let col=null;
     if(!HUBS.includes(l.to))
-      out.push({title:`${l.to} ARR`,   items:((AOI[l.to]||{}).ARR)||[],   stale:aoiStale(l.to)});
+      col={title:`${l.to} ARR`,   items:((AOI[l.to]||{}).ARR)||[],   stale:aoiStale(l.to)};
     else if(!HUBS.includes(l.from))
-      out.push({title:`${l.from} DEP`, items:((AOI[l.from]||{}).DEP)||[], stale:aoiStale(l.from)});
+      col={title:`${l.from} DEP`, items:((AOI[l.from]||{}).DEP)||[], stale:aoiStale(l.from)};
+    if(!col) continue;
+    /* Wird dieselbe Station am selben Tag erneut angeflogen, stehen die Details
+       nur einmal. Leere Spalten bleiben doppelt – sie dienen zum Ausfüllen. */
+    if(col.items.length){
+      if(seen.has(col.title)) continue;
+      seen.add(col.title);
+    }
+    out.push(col);
   }
   return out;
 }
