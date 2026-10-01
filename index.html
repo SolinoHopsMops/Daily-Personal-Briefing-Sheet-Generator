@@ -102,7 +102,9 @@
           eine Spalte je Leg geteilt – benannt nach Station und ARR/DEP – und aus der
           hinterlegten Datenbank gefüllt. Nur Outstations bekommen eine Spalte, reine
           ZRH/GVA-Legs nicht. Stationen ohne Eintrag bleiben leer zum Selbstausfüllen.
-          Hinterlegt: BCN, LHR, FRA.</li>
+          Hinterlegt: BCN, LHR, FRA, AMS, HAM. Jeder Eintrag trägt ein Prüfdatum; ist es älter
+          als sechs Monate, erscheint in der Spalte rot <b>Last AOI Check &gt; 6 months ago</b>.
+          Der Schriftgrad passt sich automatisch an, damit lange Listen nie abgeschnitten werden.</li>
       <li><b>Ziel GVA:</b> Kurzhinweis <b>APU: 88, 121, 123, 125, 127</b>, eingefügt in den
           freien Rest der bestehenden Feldzeile – ohne zusätzliche Höhe.</li>
       <li><b>Endet der Einsatz nicht in Zürich</b>, heisst das Feld neben der Crewbus-Zeit
@@ -204,8 +206,10 @@ const PASSIVE_CODES = ["DH","PAX","TR"];
    AOI ESSENTIALS – Stationsdetails. Hier fortlaufend ergänzen.
    Schema:  CODE: { ARR: [ "...", ... ], DEP: [ "...", ... ] }
    ===================================================================== */
+const AOI_MAX_AGE_MONTHS = 6;          /* danach roter Hinweis im Remarks-Feld */
 const AOI = {
   BCN: {
+    checked: "2026-09-27",
     ARR: ["APCH: callsign only",
           "No EAT when < 10 min. delay",
           "Tight separation",
@@ -221,6 +225,7 @@ const AOI = {
           "Autoswitch active: 2000 ft -> BCN APP"]
   },
   LHR: {
+    checked: "2026-09-27",
     ARR: ["PDF RWY Concept",
           "121.605 Heathrow Fire Brigade",
           "No A/C type on first contact APCH",
@@ -232,6 +237,7 @@ const AOI = {
           "TRPDR AUTO"]
   },
   FRA: {
+    checked: "2026-09-27",
     ARR: ["Frankfurt Rescue 121.555",
           "ARR: call sign only",
           "TWR: APCH type, RWY",
@@ -246,15 +252,61 @@ const AOI = {
           "APU 5 min. before",
           "Monitor DLV from TOBT -5",
           "TRPDR AUTO"]
+  },
+  AMS: {
+    checked: "2026-09-27",
+    ARR: ["FIRE RESCUE 130.480",
+          "Pref: 06, 18R, 36R, 18C, 36C, 27",
+          "SPDs: 250, 220 after IAF/HLD; below 220 acc. +/-5 kt",
+          "180 intercept HDG to FNL, 180-160 established, 160 til 4",
+          "APCH: callsign only / TWR: RWY",
+          "ILS: gear after 2000 ft, final flap passing 1200 ft",
+          "TXI in via North: TWY A, north side of AD",
+          "TXI out via North: TWY B, north side of AD",
+          "TXI in via South: TWY B and Q",
+          "TXI out via South: TWY A and Q",
+          "APU 5 min. after"],
+    DEP: ["Pref: 36L, 24, 36C, 18L, 18C, 09",
+          "Clearance 20 min. prior EOBT / 35 min. prior CTOT",
+          "36L in use: 30 min EOBT / 45 min CTOT",
+          "After clearance switch immediately to Schiphol Planner",
+          "APU 5 min. before TOBT (except < -5 C or > 25 C)",
+          "DEP: actual ALT, SID (or HDG if instructed by TWR)",
+          "DEP to Radar: callsign only",
+          "Additional constraints: SID Continuation Charts"]
+  },
+  HAM: {
+    checked: "2026-09-27",
+    ARR: ["Rescue Hamburg 121.555",
+          "R05 -> A5 not avail. to vacate",
+          "G (F - Y3): max taxi SPD 25 kt; G (Y1 - Y3): max 15 kt",
+          "TRPDR STBY",
+          "APU imm. off"],
+    DEP: ["TKOF R33 standard with intersection M (B5)",
+          "CLRNCE 30 min prior; state only en-route CLRNCE if wished so",
+          "TRPDR AUTO",
+          "APU: 8 before pier / 5 remote",
+          "2000 ft: ctct BREMEN"]
   }
 };
+
+/* Ist der Eintrag einer Station älter als die erlaubte Frist? */
+function aoiStale(code){
+  const e=AOI[code];
+  if(!e || !e.checked) return false;
+  const d=new Date(e.checked+"T00:00:00Z");
+  const limit=new Date(d); limit.setUTCMonth(limit.getUTCMonth()+AOI_MAX_AGE_MONTHS);
+  return new Date() > limit;
+}
 /* Spalten nur für Outstations: Ziel ausserhalb der Basis -> ARR,
    Abflug ausserhalb der Basis -> DEP. Reine Basis-Legs bekommen keine. */
 function aoiColumns(legs){
   const out=[];
   for(const l of legs){
-    if(!HUBS.includes(l.to))        out.push({title:`${l.to} ARR`,   items:((AOI[l.to]||{}).ARR)||[]});
-    else if(!HUBS.includes(l.from)) out.push({title:`${l.from} DEP`, items:((AOI[l.from]||{}).DEP)||[]});
+    if(!HUBS.includes(l.to))
+      out.push({title:`${l.to} ARR`,   items:((AOI[l.to]||{}).ARR)||[],   stale:aoiStale(l.to)});
+    else if(!HUBS.includes(l.from))
+      out.push({title:`${l.from} DEP`, items:((AOI[l.from]||{}).DEP)||[], stale:aoiStale(l.from)});
   }
   return out;
 }
@@ -548,8 +600,8 @@ function buildPDF(legs, answers, into, aoi){
     doc.setLineWidth(0.212); doc.setDrawColor(...RULE); doc.line(x,yTop+head,x+w,yTop+head);
     lab(x+1.6,yTop+head-2.0,"REMARKS  ·  AOI ESSENTIALS",6.0,INK,SP.m);
     const n=Math.max(cols.length,1), cw=w/n;
-    const wrap=(t,maxW)=>{
-      doc.setFont("helvetica","normal"); doc.setFontSize(5.2);
+    const wrapAt=(t,maxW,size)=>{
+      doc.setFont("helvetica","normal"); doc.setFontSize(size);
       const out=[]; let line="";
       for(const word of t.split(" ")){
         const probe = line ? line+" "+word : word;
@@ -559,18 +611,32 @@ function buildPDF(legs, answers, into, aoi){
       if(line) out.push(line);
       return out;
     };
+    /* Schriftgrad so wählen, dass die längste Spalte vollständig hineinpasst */
+    let size=5.2, lead=2.4;
+    for(const cand of [5.2,5.0,4.8,4.6,4.4,4.2]){
+      const ld=cand/5.2*2.4;
+      const need=Math.max(...cols.map(c=>
+        (c.stale?1.2:0) + c.items.reduce((a,it)=>a+wrapAt(it,cw-5.4,cand).length,0)));
+      if(yTop+head+7.0 + need*ld <= yTop+h-1.4){ size=cand; lead=ld; break; }
+      size=cand; lead=ld;
+    }
+    const wrap=(t,maxW)=>wrapAt(t,maxW,size);
     for(let i=0;i<n;i++){
       const cx=x+i*cw;
       if(i){ doc.setDrawColor(...RULE); doc.setLineWidth(0.141); doc.line(cx,yTop+head,cx,yTop+h); }
       lab(cx+1.6,yTop+head+3.4,cols[i].title,5.8,INK,SP.s);
       let yy=yTop+head+7.0;
+      if(cols[i].stale){        /* Eintrag überaltert – deutlich sichtbar machen */
+        lab(cx+1.6,yy,"Last AOI Check > "+AOI_MAX_AGE_MONTHS+" months ago",size,RED,0.04);
+        yy+=lead*1.2;
+      }
       for(const it of cols[i].items){
         const lines=wrap(it, cw-5.4);
         lines.forEach((ln,k)=>{
           if(yy>yTop+h-1.4) return;
-          if(k===0) lab(cx+1.6,yy,"-",5.2,SOFT,0.04);
-          lab(cx+3.4,yy,ln,5.2,SOFT,0.04);   /* Folgezeilen eingerückt */
-          yy+=2.4;
+          if(k===0) lab(cx+1.6,yy,"-",size,SOFT,0.04);
+          lab(cx+3.4,yy,ln,size,SOFT,0.04);   /* Folgezeilen eingerückt */
+          yy+=lead;
         });
       }
     }
