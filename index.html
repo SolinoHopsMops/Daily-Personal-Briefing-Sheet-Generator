@@ -108,9 +108,6 @@
           Wird eine Station am selben Tag zweimal angeflogen, stehen ihre Details nur einmal.</li>
       <li><b>Ziel GVA:</b> Kurzhinweis <b>APU: 88, 121, 123, 125, 127</b>, eingefügt in den
           freien Rest der bestehenden Feldzeile – ohne zusätzliche Höhe.</li>
-      <li><b>Endet der Einsatz nicht in Zürich</b>, heisst das Feld neben der Crewbus-Zeit
-          <b>Pick-up Time Tomorrow</b>. Bei GVA-Bezug steht ausserdem <b>Door Code 4432</b>
-          neben der CUT-Frequenz in der Kopfzeile.</li>
     </ol>
     <p class="note">Es werden die fünf jüngsten Änderungen gezeigt.</p>
   </details>
@@ -598,14 +595,19 @@ function buildPDF(legs, answers, into, aoi){
     return w;
   };
   /* MINIMUM FUEL: ____   PF/PM: [2 Stellen] – feste Positionen */
+  /* MIN FUEL und BLOCK mit identischer Linienlänge, dahinter PF/PM */
   const fuelRolleRow=yBase=>{
-    const fx=X0+54.0;
-    const fw=lab(fx,yBase,"MINIMUM FUEL:",6.2,SOFT,0.317);
     const box=8.0;
     const rw=labW("PF/PM:",6.2,0.317)+0.9+box;
     const rx=X1-2.0-rw;
+    const w1=labW("MIN FUEL:",6.2,0.317), w2=labW("BLOCK:",6.2,0.317);
+    const ln=((rx-4.0)-(X0+54.0)-w1-1.4-w2-1.4-4.0)/2;   /* beide gleich lang */
     doc.setLineWidth(0.176); doc.setDrawColor(...SOFT);
-    doc.line(fx+fw+1.4, yBase+0.6, rx-4.0, yBase+0.6);
+    let fx=X0+54.0;
+    fx+=lab(fx,yBase,"MIN FUEL:",6.2,SOFT,0.317)+1.4;
+    doc.line(fx,yBase+0.6,fx+ln,yBase+0.6); fx+=ln+4.0;
+    fx+=lab(fx,yBase,"BLOCK:",6.2,SOFT,0.317)+1.4;
+    doc.line(fx,yBase+0.6,fx+ln,yBase+0.6);
     lab(rx,yBase,"PF/PM:",6.2,SOFT,0.317);
     doc.setLineWidth(0.212); doc.setDrawColor(...INK);
     doc.rect(X1-2.0-box, yBase-4.0+1.1, box, 4.0, "S");
@@ -758,7 +760,11 @@ function buildPDF(legs, answers, into, aoi){
 
   /* Zeitkacheln */
   const ch=15;
-  const cw1=42.0, cw2=CW-cw1-3.0;      /* Crewbus breiter wegen der Zonen */
+  /* Drittes Feld gibt es nur, wenn der Tag ausserhalb Zürichs endet.
+     Fällt es weg, teilen sich die beiden Kacheln die Breite gleichmässig. */
+  const pickupTomorrow = legs[legs.length-1].to!=="ZRH";
+  const cw1 = pickupTomorrow ? 42.0 : (CW-3.0)/2;
+  const cw2 = CW-cw1-3.0;
 
   /* Meetingpoint nur bei aktivem Start an einer Station mit Vorgabe */
   const siko = leadDH ? null
@@ -801,11 +807,11 @@ function buildPDF(legs, answers, into, aoi){
     divider(x2+64.0);
     sx=x2+66.5;
   } else sx=x2+34.5;
-  /* Endet der Einsatz nicht in Zürich, wird morgen abgeholt statt gefahren */
-  const endsZRH = legs[legs.length-1].to==="ZRH";
-  lab(sx,y+3.6, endsZRH?"EVTL. VEREINBARTE":"PICK-UP TIME", 5.5,SOFT,0.123);
-  lab(sx,y+6.2, endsZRH?"CREWBUS ZEIT":"TOMORROW",          5.5,SOFT,0.123);
-  wline(sx,y+11.4,x2+cw2-2.0-sx);
+  if(pickupTomorrow){
+    lab(sx,y+3.6,"PICK-UP TIME",5.5,SOFT,0.123);
+    lab(sx,y+6.2,"TOMORROW",    5.5,SOFT,0.123);
+    wline(sx,y+11.4,x2+cw2-2.0-sx);
+  }
   y+=ch+2.6;
   }
 
