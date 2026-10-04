@@ -102,7 +102,7 @@
           eine Spalte je Leg geteilt – benannt nach Station und ARR/DEP – und aus der
           hinterlegten Datenbank gefüllt. Nur Outstations bekommen eine Spalte, reine
           ZRH/GVA-Legs nicht. Stationen ohne Eintrag bleiben leer zum Selbstausfüllen.
-          Hinterlegt: BCN, LHR, FRA, AMS, HAM. Jeder Eintrag trägt ein Prüfdatum; ist es älter
+          Hinterlegt: BCN, LHR, FRA, AMS, HAM, BLQ, DUS. Jeder Eintrag trägt ein Prüfdatum; ist es älter
           als sechs Monate, erscheint in der Spalte rot <b>Last AOI Check &gt; 6 months ago</b>.
           Der Schriftgrad passt sich automatisch an, damit lange Listen nie abgeschnitten werden.
           Wird eine Station am selben Tag zweimal angeflogen, stehen ihre Details nur einmal.</li>
@@ -210,7 +210,7 @@ const PASSIVE_CODES = ["DH","PAX","TR"];
 const AOI_MAX_AGE_MONTHS = 6;          /* danach roter Hinweis im Remarks-Feld */
 const AOI = {
   BCN: {
-    checked: "2026-09-27",
+    checked: "2026-10-02",
     ARR: ["APCH: callsign only",
           "No EAT when < 10 min. delay",
           "Tight separation",
@@ -226,7 +226,7 @@ const AOI = {
           "Autoswitch active: 2000 ft -> BCN APP"]
   },
   LHR: {
-    checked: "2026-09-27",
+    checked: "2026-10-02",
     ARR: ["PDF RWY Concept",
           "121.605 Heathrow Fire Brigade",
           "No A/C type on first contact APCH",
@@ -238,7 +238,7 @@ const AOI = {
           "TRPDR AUTO"]
   },
   FRA: {
-    checked: "2026-09-27",
+    checked: "2026-10-02",
     ARR: ["Frankfurt Rescue 121.555",
           "ARR: call sign only",
           "TWR: APCH type, RWY",
@@ -255,7 +255,7 @@ const AOI = {
           "TRPDR AUTO"]
   },
   AMS: {
-    checked: "2026-09-27",
+    checked: "2026-10-02",
     ARR: ["FIRE RESCUE 130.480",
           "Pref: 06, 18R, 36R, 18C, 36C, 27",
           "SPDs: 250, 220 after IAF/HLD; below 220 acc. +/-5 kt",
@@ -277,7 +277,7 @@ const AOI = {
           "Additional constraints: SID Continuation Charts"]
   },
   HAM: {
-    checked: "2026-09-27",
+    checked: "2026-10-02",
     ARR: ["Rescue Hamburg 121.555",
           "R05 -> A5 not avail. to vacate",
           "G (F - Y3): max taxi SPD 25 kt; G (Y1 - Y3): max 15 kt",
@@ -288,6 +288,25 @@ const AOI = {
           "TRPDR AUTO",
           "APU: 8 before pier / 5 remote",
           "2000 ft: ctct BREMEN"]
+  },
+  BLQ: {
+    checked: "2026-10-02",
+    ARR: ["SPDs: 200 intercept / 12 NM, 180 @ 9 NM, 160 @ 5 NM",
+          "Exit 12 via J / G",
+          "TRPDR STBY"],
+    DEP: ["TRPDR AUTO"]
+  },
+  DUS: {
+    checked: "2026-10-02",
+    ARR: ["DUESSELDORF RESCUE 121.555",
+          "Expect 05L / 23R",
+          "05R: exit L2 not avail.",
+          "TRPDR STBY"],
+    DEP: ["APU 30 min. before",
+          "Expect 05R / 23L",
+          "En-route request only (if wished so)",
+          "DCL TOBT -30 min.",
+          "TRPDR AUTO"]
   }
 };
 
@@ -800,10 +819,18 @@ function buildPDF(legs, answers, into, aoi){
   const bagW=Math.max(bagLbl,bagRow)+3.2;
   /* An der Basis: Briefingraum. Ausserhalb: kein Briefingraum, dafür die Pick-up Time.
      SLOT / ETD ist das Flexfeld und nimmt auf, was übrig bleibt. */
+  /* Endet der Tag dort, wo er begann, bleibt das Gepäck an Bord –
+     dann entfallen Crew Bags und Baggage Labeln, der Platz geht an A/C REG und Slot. */
+  const roundTrip = legs[0].from === legs[legs.length-1].to;
+  const regW = roundTrip ? 45 : 26;
   const titles = atBase
-    ? ["STAND","BRF ROOM","SLOT / ETD","A/C REG(S)","CREW BAGS","BAGGAGE LABELN"]
-    : ["PICK-UP TIME","STAND","SLOT / ETD","A/C REG(S)","CREW BAGS","BAGGAGE LABELN"];
-  const fixed = atBase ? [17,20,0,26,18,bagW] : [22,17,0,26,18,bagW];
+    ? ["STAND","BRF ROOM","SLOT / ETD","A/C REG(S)"]
+    : ["PICK-UP TIME","STAND","SLOT / ETD","A/C REG(S)"];
+  const fixed  = atBase ? [17,20,0,regW] : [22,17,0,regW];
+  if(!roundTrip){
+    titles.push("CREW BAGS","BAGGAGE LABELN");
+    fixed.push(18,bagW);
+  }
   const flex = titles.indexOf("SLOT / ETD");
   const wq = fixed.slice();
   wq[flex] = CW - (fixed.reduce((a,b)=>a+b,0) + gap*(wq.length-1));
