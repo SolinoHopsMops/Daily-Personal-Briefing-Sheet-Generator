@@ -102,7 +102,7 @@
           eine Spalte je Leg geteilt – benannt nach Station und ARR/DEP – und aus der
           hinterlegten Datenbank gefüllt. Nur Outstations bekommen eine Spalte, reine
           ZRH/GVA-Legs nicht. Stationen ohne Eintrag bleiben leer zum Selbstausfüllen.
-          Hinterlegt: BCN, LHR, FRA, AMS, HAM, BLQ, DUS. Jeder Eintrag trägt ein Prüfdatum; ist es älter
+          Hinterlegt: BCN, LHR, FRA, AMS, HAM, BLQ, DUS, CAI, BER, OTP. Jeder Eintrag trägt ein Prüfdatum; ist es älter
           als sechs Monate, erscheint in der Spalte rot <b>Last AOI Check &gt; 6 months ago</b>.
           Der Schriftgrad passt sich automatisch an, damit lange Listen nie abgeschnitten werden.
           Wird eine Station am selben Tag zweimal angeflogen, stehen ihre Details nur einmal.</li>
@@ -292,6 +292,31 @@ const AOI = {
           "Exit 12 via J / G",
           "TRPDR STBY"],
     DEP: ["TRPDR AUTO"]
+  },
+  BER: {
+    checked: "2026-10-22",
+    ARR: ["Stop line genau beachten",
+          "TRPDR STBY"],
+    DEP: ["ALT constraints SID",
+          "En-route CLR only",
+          "DCL TOBT -30 min.",
+          "TRPDR AUTO"]
+  },
+  CAI: {
+    checked: "2026-10-10",
+    ARR: ["220 kt below 4500 ft",
+          "210 intercept / 18 NM straight in",
+          "180 @ 8 NM / 12 NM straight in",
+          "160 til 5",
+          "30 kt TWY / 15 kt APN"],
+    DEP: ["Say REG and slot when requesting start-up"]
+  },
+  OTP: {
+    checked: "2026-10-22",
+    ARR: ["TRPDR STBY"],
+    DEP: ["CLR 20 min. prior EOBT / 35 min. prior CTOT",
+          "APU 30 min. prior",
+          "TRPDR AUTO"]
   },
   DUS: {
     checked: "2026-10-02",
@@ -828,14 +853,16 @@ function buildPDF(legs, answers, into, aoi){
   /* Endet der Tag dort, wo er begann, bleibt das Gepäck an Bord –
      dann entfallen Crew Bags und Baggage Labeln, der Platz geht an A/C REG und Slot. */
   const roundTrip = legs[0].from === legs[legs.length-1].to;
-  const regW = roundTrip ? 45 : 26;
+  const regW = roundTrip ? 45 : 30;   /* längerer Titel braucht 29.3 mm */
   const titles = atBase
-    ? ["STAND","BRF ROOM","SLOT / ETD","A/C REG(S)"]
-    : ["PICK-UP TIME","STAND","SLOT / ETD","A/C REG(S)"];
-  const fixed  = atBase ? [17,20,0,regW] : [22,17,0,regW];
+    ? ["STAND","BRF ROOM","SLOT / ETD","A/C REG(S) / ETA / EX"]
+    : ["PICK-UP TIME","STAND","SLOT / ETD","A/C REG(S) / ETA / EX"];
+  const fixed  = atBase ? [13,20,0,regW] : [22,13,0,regW];
   if(!roundTrip){
-    titles.push("CREW BAGS","BAGGAGE LABELN");
-    fixed.push(18,bagW);
+    titles.push("CREW BAGS"); fixed.push(18);
+    /* Labeln ist nur an Stationen ohne eigenes Handling ein Thema –
+       bei Start in ZRH/GVA entfällt das Feld. */
+    if(!atBase){ titles.push("BAGGAGE LABELN"); fixed.push(bagW); }
   }
   const flex = titles.indexOf("SLOT / ETD");
   const wq = fixed.slice();
