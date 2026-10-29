@@ -91,6 +91,8 @@
   <details class="card rev">
     <summary>Highlights of Revision</summary>
     <ol class="rev-list">
+      <li><b>Turnaround-Farben vierstufig:</b> unter 45 min rot, unter 50 min orange,
+          ab 60 min hellgrün, dazwischen neutral.</li>
       <li><b>Start ausserhalb ZRH/GVA:</b> Die Kachelzeile mit Crew Briefing und Crewbus
           entfällt komplett. <b>Pick-up Time</b> steht stattdessen als erstes Feld in der
           Schnellfeldreihe, <b>Brf Room</b> fällt weg. Remarks wächst dadurch von 57 auf
@@ -102,7 +104,7 @@
           eine Spalte je Leg geteilt – benannt nach Station und ARR/DEP – und aus der
           hinterlegten Datenbank gefüllt. Nur Outstations bekommen eine Spalte, reine
           ZRH/GVA-Legs nicht. Stationen ohne Eintrag bleiben leer zum Selbstausfüllen.
-          Hinterlegt: BCN, LHR, FRA, AMS, HAM, BLQ, DUS, CAI, BER, OTP. Jeder Eintrag trägt ein Prüfdatum; ist es älter
+          Hinterlegt: BCN, LHR, FRA, AMS, HAM, BLQ, DUS, CAI, BER, OTP, CPH. Jeder Eintrag trägt ein Prüfdatum; ist es älter
           als sechs Monate, erscheint in der Spalte rot <b>Last AOI Check &gt; 6 months ago</b>.
           Der Schriftgrad passt sich automatisch an, damit lange Listen nie abgeschnitten werden.
           Wird eine Station am selben Tag zweimal angeflogen, stehen ihre Details nur einmal.</li>
@@ -318,6 +320,19 @@ const AOI = {
           "APU 30 min. prior",
           "TRPDR AUTO"]
   },
+  CPH: {
+    checked: "2026-10-29",
+    ARR: ["Preferential RWYs: 04L / 22L",
+          "Expect short APCH 22L",
+          "Final: callsign only",
+          "TRPDR STBY",
+          "APU 5 min. after"],
+    DEP: ["CLR 30 min. prior TOBT",
+          "04R / 22L",
+          "APU 5 min. prior TOBT",
+          "Login EKDK before TKOF",
+          "TRPDR AUTO"]
+  },
   DUS: {
     checked: "2026-10-02",
     ARR: ["DUESSELDORF RESCUE 121.555",
@@ -365,6 +380,7 @@ function aoiColumns(legs){
 const APU_GVA = "APU: 88, 121, 123, 125, 127";   /* Stände mit APU-Empfehlung in Genf */
 const TURN_RED = 45;                // Bodenzeit unter 45 min -> rot
 const TURN_ORANGE = 50;             // Bodenzeit unter 50 min -> orange
+const TURN_GREEN = 60;              // Bodenzeit ab 60 min -> hellgrün
 /* ZRH Peak Times (LT), Start und Ende einschliesslich */
 const ZRH_PEAKS = [["0700","0800"],["0930","1030"],["1200","1400"],
                    ["1630","1800"],["1930","2100"]];
@@ -537,6 +553,7 @@ const INK=[20,23,26], SOFT=[92,101,112], RULE=[185,192,199], HAIR=[223,227,231],
       RED=[200,16,46], GREEN=[18,112,58], BOXFILL=[241,244,246], WHITE=[255,255,255],
       ORA_BG=[255,227,196], ORA_EDGE=[224,138,46], ORA_INK=[122,68,0],
       RED_BG=[251,216,221], RED_EDGE=[200,16,46], RED_INK=[140,10,31],
+      GRN_BG=[222,240,227], GRN_EDGE=[79,154,104], GRN_INK=[21,92,50],
       PEAK_BG=[232,130,12], CDM_INK=[31,78,121];
 const SP={xs:0.07, s:0.176, q:0.247, m:0.317, l:0.353, xl:0.564};
 const DOW=["SUN","MON","TUE","WED","THU","FRI","SAT"];
@@ -898,10 +915,11 @@ function buildPDF(legs, answers, into, aoi){
         const own = !prev.passive && !l.passive;   /* echter A/C-Turnaround */
         let bh, base, lw;
         const valTxt=`${dur(gap)}  ·  ${l.from}`;
-        if(own && gap<TURN_ORANGE){
-          const red = gap<TURN_RED;
-          const bg   = red?RED_BG:ORA_BG, edge = red?RED_EDGE:ORA_EDGE, ink = red?RED_INK:ORA_INK;
-          const ttl  = red?"MINIMUM TURNAROUND":"TIGHT TURNAROUND";
+        if(own && (gap<TURN_ORANGE || gap>=TURN_GREEN)){
+          let bg,edge,ink,ttl;
+          if(gap<TURN_RED)           { bg=RED_BG; edge=RED_EDGE; ink=RED_INK; ttl="MINIMUM TURNAROUND"; }
+          else if(gap<TURN_ORANGE)   { bg=ORA_BG; edge=ORA_EDGE; ink=ORA_INK; ttl="TIGHT TURNAROUND"; }
+          else                       { bg=GRN_BG; edge=GRN_EDGE; ink=GRN_INK; ttl="TURNAROUND"; }
           bh=4.4; base=y+bh-1.3;
           /* Farbfeld nur unter Titel, Zeit und Ort – nicht über die ganze Zeile */
           doc.setFont("helvetica","bold"); doc.setFontSize(6.2);
